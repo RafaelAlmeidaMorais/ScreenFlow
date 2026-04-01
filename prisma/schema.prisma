@@ -1,0 +1,74 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  users     User[]
+  screens   Screen[]
+  medias    Media[]
+
+  @@map("companies")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  companyId String
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("VIEWER")
+  createdAt DateTime @default(now())
+  company   Company  @relation(fields: [companyId], references: [id])
+  medias    Media[]  @relation("CreatedByUser")
+
+  @@map("users")
+}
+
+model Screen {
+  id              String   @id @default(cuid())
+  companyId       String
+  name            String
+  description     String?
+  token           String   @unique @default(uuid())
+  intervalSeconds Int      @default(10)
+  isActive            Boolean  @default(true)
+  lastSeenAt          DateTime?
+  refreshRequestedAt  DateTime?
+  autoRefreshMinutes  Int      @default(360)
+  showProgressBar     Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  company         Company  @relation(fields: [companyId], references: [id])
+  medias          Media[]
+
+  @@map("screens")
+}
+
+model Media {
+  id              String   @id @default(cuid())
+  screenId        String
+  companyId       String
+  type            String   @default("IMAGE")
+  fileUrl         String
+  title           String
+  durationSeconds Int      @default(10)
+  orderIndex      Int      @default(0)
+  startDate       DateTime @default(now())
+  endDate         DateTime?
+  isEnabled       Boolean  @default(true)
+  createdById     String
+  createdAt       DateTime @default(now())
+  screen          Screen   @relation(fields: [screenId], references: [id])
+  company         Company  @relation(fields: [companyId], references: [id])
+  createdBy       User     @relation("CreatedByUser", fields: [createdById], references: [id])
+
+  @@map("medias")
+}
