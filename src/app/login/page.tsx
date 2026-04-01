@@ -19,17 +19,28 @@ export default function LoginPage() {
     setError("");
     setLoading(true);
 
-    const result = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      const result = await signIn("credentials", {
+        email,
+        password,
+        redirect: false,
+        callbackUrl: "/dashboard",
+      });
 
-    if (result?.error) {
-      setError("Email ou senha inválidos");
+      console.log("signIn result:", result);
+
+      if (result?.error) {
+        setError("Email ou senha inválidos");
+        setLoading(false);
+      } else if (result?.url) {
+        window.location.href = result.url;
+      } else {
+        window.location.href = "/dashboard";
+      }
+    } catch (err) {
+      console.error("signIn error:", err);
+      setError("Erro ao conectar. Tente novamente.");
       setLoading(false);
-    } else {
-      window.location.href = "/dashboard";
     }
   }
 
