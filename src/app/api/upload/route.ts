@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { writeFile } from "fs/promises";
-import path from "path";
+import { uploadToR2 } from "@/lib/r2";
 import { v4 as uuidv4 } from "uuid";
 
 const ALLOWED_IMAGE = ["image/jpeg", "image/png", "image/webp", "image/gif"];
@@ -36,15 +35,22 @@ export async function POST(req: NextRequest) {
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
-  const filename = `${uuidv4()}.${ext}`;
+  const key = `media/${uuidv4()}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  const uploadsDir = path.join(process.cwd(), "public", "uploads");
-  await writeFile(path.join(uploadsDir, filename), buffer);
+  try {
+    const url = await uploadToR2(buffer, key, file.type);
 
-  return NextResponse.json({
-    url: `/uploads/${filename}`,
-    type: isVideo ? "VIDEO" : "IMAGE",
-    filename: file.name,
-  });
+    return NextResponse.json({
+      url,
+      type: isVideo ? "VIDEO" : "IMAGE",
+      filename: file.name,
+    });
+  } catch (err) {
+    console.error("R2 upload error:", err);
+    return NextResponse.json(
+      { error: "Erro ao fazer upload do arquivo" },
+      { status: 500 }
+    );
+  }
 }
