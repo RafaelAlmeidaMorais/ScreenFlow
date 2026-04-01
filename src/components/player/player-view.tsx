@@ -177,7 +177,7 @@ export function PlayerView({
           key={current.id + currentIndex}
           src={current.fileUrl}
           alt={current.title}
-          className="w-full h-full object-cover animate-in fade-in duration-700"
+          className="w-full h-full object-contain animate-in fade-in duration-700"
         />
       ) : (
         <video
@@ -189,7 +189,7 @@ export function PlayerView({
           playsInline
           onEnded={goNext}
           onError={handleVideoError}
-          className="w-full h-full object-cover"
+          className="w-full h-full object-contain"
         />
       )}
 
