@@ -2,6 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { PlayerView } from "@/components/player/player-view";
 
+import type { Viewport } from "next";
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 interface PlayerPageProps {
   params: Promise<{ slug: string }>;
 }
