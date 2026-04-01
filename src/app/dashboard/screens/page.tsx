@@ -21,6 +21,7 @@ export default async function ScreensPage() {
     token: s.token,
     isActive: s.isActive,
     intervalSeconds: s.intervalSeconds,
+    showProgressBar: s.showProgressBar,
     mediaCount: s.medias.length,
     lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
   }));

@@ -12,6 +12,7 @@ interface Screen {
   token: string;
   isActive: boolean;
   intervalSeconds: number;
+  showProgressBar: boolean;
   mediaCount: number;
   lastSeenAt: string | null;
 }
