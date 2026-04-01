@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
 
-export async function middleware(req: NextRequest) {
-  const token = await getToken({ req, secret: process.env.AUTH_SECRET });
-  const isLoggedIn = !!token;
+export function middleware(req: NextRequest) {
   const isOnDashboard = req.nextUrl.pathname.startsWith("/dashboard");
   const isOnLogin = req.nextUrl.pathname === "/login";
 
-  if (isOnDashboard && !isLoggedIn) {
+  // NextAuth v5 cookie names
+  const hasSession =
+    req.cookies.has("authjs.session-token") ||
+    req.cookies.has("__Secure-authjs.session-token");
+
+  if (isOnDashboard && !hasSession) {
     return NextResponse.redirect(new URL("/login", req.nextUrl));
   }
 
-  if (isOnLogin && isLoggedIn) {
+  if (isOnLogin && hasSession) {
     return NextResponse.redirect(new URL("/dashboard", req.nextUrl));
   }
 
