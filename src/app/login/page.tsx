@@ -1,14 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,25 +17,33 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const result = await signIn("credentials", {
-        email,
-        password,
-        redirect: false,
-        callbackUrl: "/dashboard",
+      // Get CSRF token first
+      const csrfRes = await fetch("/api/auth/csrf");
+      const { csrfToken } = await csrfRes.json();
+
+      // Call NextAuth credentials endpoint directly
+      const res = await fetch("/api/auth/callback/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          csrfToken,
+          email,
+          password,
+          callbackUrl: "/dashboard",
+        }),
+        redirect: "manual",
       });
 
-      console.log("signIn result:", result);
-
-      if (result?.error) {
-        setError("Email ou senha inválidos");
-        setLoading(false);
-      } else if (result?.url) {
-        window.location.href = result.url;
-      } else {
+      // NextAuth returns a redirect (302) on success
+      if (res.type === "opaqueredirect" || res.status === 302 || res.status === 200) {
         window.location.href = "/dashboard";
+        return;
       }
+
+      setError("Email ou senha inválidos");
+      setLoading(false);
     } catch (err) {
-      console.error("signIn error:", err);
+      console.error("Login error:", err);
       setError("Erro ao conectar. Tente novamente.");
       setLoading(false);
     }
