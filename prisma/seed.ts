@@ -6,6 +6,7 @@ const prisma = new PrismaClient();
 
 async function main() {
   // Clear existing data
+  await prisma.auditLog.deleteMany();
   await prisma.media.deleteMany();
   await prisma.screen.deleteMany();
   await prisma.user.deleteMany();
@@ -19,7 +20,7 @@ async function main() {
     },
   });
 
-  // Create admin user
+  // Create super admin user
   const hashedPassword = await bcrypt.hash("admin123", 12);
   const admin = await prisma.user.create({
     data: {
@@ -28,6 +29,7 @@ async function main() {
       name: "Administrador",
       password: hashedPassword,
       role: "COMPANY_ADMIN",
+      isSuperAdmin: true,
     },
   });
 
@@ -36,6 +38,7 @@ async function main() {
     data: {
       companyId: company.id,
       name: "Tela Principal - Lobby",
+      slug: "lobby-principal",
       description: "Tela de boas-vindas na entrada principal",
       token: uuidv4(),
       intervalSeconds: 10,
@@ -48,11 +51,12 @@ async function main() {
     data: {
       companyId: company.id,
       name: "Tela Salão de Eventos",
+      slug: "salao-eventos",
       description: "Programação de eventos e avisos",
       token: uuidv4(),
       intervalSeconds: 15,
       isActive: true,
-      lastSeenAt: new Date(Date.now() - 3600000), // 1h ago
+      lastSeenAt: new Date(Date.now() - 3600000),
     },
   });
 
@@ -60,6 +64,7 @@ async function main() {
     data: {
       companyId: company.id,
       name: "Tela Corredor Administrativo",
+      slug: "corredor-administrativo",
       description: "Comunicados internos",
       token: uuidv4(),
       intervalSeconds: 8,
@@ -123,7 +128,7 @@ async function main() {
         durationSeconds: 30,
         orderIndex: 1,
         startDate: lastWeek,
-        endDate: lastWeek, // expired
+        endDate: lastWeek,
         isEnabled: true,
         createdById: admin.id,
       },
@@ -145,8 +150,8 @@ async function main() {
 
   console.log("✅ Seed completed!");
   console.log(`   Company: ${company.name}`);
-  console.log(`   Admin: ${admin.email} / admin123`);
-  console.log(`   Screens: 3`);
+  console.log(`   Admin: ${admin.email} / admin123 (Super Admin)`);
+  console.log(`   Screens: 3 (slugs: lobby-principal, salao-eventos, corredor-administrativo)`);
   console.log(`   Medias: 5`);
 }
 

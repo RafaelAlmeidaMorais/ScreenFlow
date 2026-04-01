@@ -8,6 +8,7 @@ import { EditScreenDialog } from "@/components/dashboard/edit-screen-dialog";
 interface Screen {
   id: string;
   name: string;
+  slug: string;
   description: string | null;
   token: string;
   isActive: boolean;
@@ -55,6 +56,7 @@ export function ScreenList({ screens }: { screens: Screen[] }) {
                 </Badge>
               </div>
               <div className="flex items-center gap-3 mt-1">
+                <span className="text-xs text-orange/60">/{screen.slug}</span>
                 {screen.description && (
                   <p className="text-xs text-muted-foreground truncate max-w-[200px]">{screen.description}</p>
                 )}
@@ -72,7 +74,7 @@ export function ScreenList({ screens }: { screens: Screen[] }) {
               variant="ghost"
               size="sm"
               className="text-xs text-muted-foreground hover:text-orange hover:bg-orange/10 cursor-pointer"
-              onClick={() => window.open(`/player/${screen.token}`, "_blank")}
+              onClick={() => window.open(`/player/${screen.slug}`, "_blank")}
             >
               <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z" />

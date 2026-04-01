@@ -8,8 +8,11 @@ export default async function ScreensPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
+  const isSuperAdmin = session.user.isSuperAdmin;
+  const companyFilter = isSuperAdmin ? {} : { companyId: session.user.companyId };
+
   const screens = await prisma.screen.findMany({
-    where: { companyId: session.user.companyId },
+    where: companyFilter,
     include: { medias: true },
     orderBy: { createdAt: "desc" },
   });
@@ -17,6 +20,7 @@ export default async function ScreensPage() {
   const screenData = screens.map((s) => ({
     id: s.id,
     name: s.name,
+    slug: s.slug,
     description: s.description,
     token: s.token,
     isActive: s.isActive,
@@ -32,7 +36,7 @@ export default async function ScreensPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Telas</h1>
           <p className="text-muted-foreground mt-1">
-            Gerencie as telas da sua empresa
+            Gerencie as telas {isSuperAdmin ? "de todas as instituições" : "da sua empresa"}
           </p>
         </div>
         <CreateScreenDialog />

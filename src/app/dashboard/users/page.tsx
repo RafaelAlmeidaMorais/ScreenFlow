@@ -1,70 +1,60 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
-import { Badge } from "@/components/ui/badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-
-const roleLabels: Record<string, string> = {
-  COMPANY_ADMIN: "Administrador",
-  EDITOR: "Editor",
-  VIEWER: "Visualizador",
-};
+import { UserList } from "@/components/dashboard/user-list";
+import { CreateUserDialog } from "@/components/dashboard/create-user-dialog";
 
 export default async function UsersPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
+  const isSuperAdmin = session.user.isSuperAdmin;
+  const isCompanyAdmin = session.user.role === "COMPANY_ADMIN";
+
+  if (!isSuperAdmin && !isCompanyAdmin) redirect("/dashboard");
+
   const users = await prisma.user.findMany({
-    where: { companyId: session.user.companyId },
+    where: isSuperAdmin ? {} : { companyId: session.user.companyId },
+    include: { company: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
   });
 
+  const userData = users.map((u) => ({
+    id: u.id,
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    isSuperAdmin: u.isSuperAdmin,
+    companyId: u.companyId,
+    companyName: u.company.name,
+    createdAt: u.createdAt.toISOString(),
+  }));
+
+  const companies = isSuperAdmin
+    ? await prisma.company.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } })
+    : [];
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Usuários</h1>
-        <p className="text-muted-foreground mt-1">
-          Gerencie os usuários da sua empresa
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Usuários</h1>
+          <p className="text-muted-foreground mt-1">
+            {isSuperAdmin ? "Todos os usuários do sistema" : "Usuários da sua instituição"}
+          </p>
+        </div>
+        <CreateUserDialog
+          companies={companies}
+          isSuperAdmin={isSuperAdmin}
+          defaultCompanyId={session.user.companyId}
+        />
       </div>
-
-      <div className="space-y-3">
-        {users.map((user) => {
-          const initials = user.name
-            .split(" ")
-            .map((n) => n[0])
-            .join("")
-            .toUpperCase()
-            .slice(0, 2);
-
-          return (
-            <div
-              key={user.id}
-              className="flex items-center justify-between rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-5 transition-all duration-200 hover:border-border hover:bg-card/80"
-            >
-              <div className="flex items-center gap-4">
-                <Avatar className="h-11 w-11 border-2 border-orange/20">
-                  <AvatarFallback className="bg-orange/10 text-orange text-xs font-semibold">
-                    {initials}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div className="flex items-center gap-2.5">
-                    <h3 className="text-sm font-semibold">{user.name}</h3>
-                    <Badge
-                      variant="secondary"
-                      className="bg-orange/10 text-orange border border-orange/20 hover:bg-orange/10"
-                    >
-                      {roleLabels[user.role] ?? user.role}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{user.email}</p>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      <UserList
+        users={userData}
+        currentUserId={session.user.id}
+        isSuperAdmin={isSuperAdmin}
+        companies={companies}
+      />
     </div>
   );
 }

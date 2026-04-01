@@ -19,6 +19,7 @@ import {
 interface ScreenData {
   id: string;
   name: string;
+  slug: string;
   description: string | null;
   token: string;
   intervalSeconds: number;
@@ -43,8 +44,8 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
       await updateScreen(screen.id, formData);
       setOpen(false);
       router.refresh();
-    } catch {
-      alert("Erro ao atualizar tela");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao atualizar tela");
     } finally {
       setLoading(false);
     }
@@ -56,6 +57,7 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
     try {
       await deleteScreen(screen.id);
       setOpen(false);
+      router.push("/dashboard/screens");
       router.refresh();
     } catch {
       alert("Erro ao excluir tela");
@@ -64,8 +66,8 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
     }
   }
 
-  function copyToken() {
-    const url = `${window.location.origin}/player/${screen.token}`;
+  function copyPlayerUrl() {
+    const url = `${window.location.origin}/player/${screen.slug}`;
     navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -85,7 +87,7 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
           Editar
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-md bg-card border-border/50 ">
+      <DialogContent className="sm:max-w-md bg-card border-border/50">
         <DialogHeader>
           <DialogTitle>Editar tela</DialogTitle>
         </DialogHeader>
@@ -99,6 +101,19 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
               required
               className="bg-background/50 border-border/50"
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="slug">Slug (URL do player)</Label>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground/60 shrink-0">/player/</span>
+              <Input
+                id="slug"
+                name="slug"
+                defaultValue={screen.slug}
+                required
+                className="bg-background/50 border-border/50"
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
@@ -144,13 +159,13 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
             <Label>URL do Player</Label>
             <div className="flex items-center gap-2">
               <code className="flex-1 text-xs bg-background/50 border border-border/50 rounded-lg px-3 py-2.5 truncate text-muted-foreground">
-                /player/{screen.token}
+                /player/{screen.slug}
               </code>
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                onClick={copyToken}
+                onClick={copyPlayerUrl}
                 className="shrink-0 text-xs cursor-pointer hover:text-orange hover:bg-orange/10"
               >
                 {copied ? (

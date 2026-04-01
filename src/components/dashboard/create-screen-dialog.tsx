@@ -15,19 +15,48 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
+function toSlug(text: string) {
+  return text
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
+}
+
 export function CreateScreenDialog() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [slugManual, setSlugManual] = useState(false);
   const router = useRouter();
 
+  function handleNameChange(value: string) {
+    setName(value);
+    if (!slugManual) {
+      setSlug(toSlug(value));
+    }
+  }
+
+  function handleSlugChange(value: string) {
+    setSlugManual(true);
+    setSlug(value.toLowerCase().replace(/[^a-z0-9-]/g, ""));
+  }
+
   async function handleSubmit(formData: FormData) {
+    formData.set("slug", slug);
     setLoading(true);
     try {
       await createScreen(formData);
       setOpen(false);
+      setName("");
+      setSlug("");
+      setSlugManual(false);
       router.refresh();
-    } catch {
-      alert("Erro ao criar tela");
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Erro ao criar tela");
     } finally {
       setLoading(false);
     }
@@ -54,9 +83,27 @@ export function CreateScreenDialog() {
               id="name"
               name="name"
               placeholder="Ex: Tela do Lobby"
+              value={name}
+              onChange={(e) => handleNameChange(e.target.value)}
               required
               className="bg-background/50 border-border/50"
             />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="slug">Slug (URL do player)</Label>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground/60 shrink-0">/player/</span>
+              <Input
+                id="slug"
+                name="slug"
+                placeholder="tela-do-lobby"
+                value={slug}
+                onChange={(e) => handleSlugChange(e.target.value)}
+                required
+                className="bg-background/50 border-border/50"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground/60">Gerado automaticamente a partir do nome. Pode editar manualmente.</p>
           </div>
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
@@ -81,19 +128,10 @@ export function CreateScreenDialog() {
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => setOpen(false)}
-              className="cursor-pointer"
-            >
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="cursor-pointer">
               Cancelar
             </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-orange hover:bg-orange/90 text-orange-foreground font-semibold cursor-pointer"
-            >
+            <Button type="submit" disabled={loading} className="bg-orange hover:bg-orange/90 text-orange-foreground font-semibold cursor-pointer">
               {loading ? "Criando..." : "Criar tela"}
             </Button>
           </div>

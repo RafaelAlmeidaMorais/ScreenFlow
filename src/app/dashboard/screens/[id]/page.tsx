@@ -80,6 +80,7 @@ export default async function ScreenDetailPage({ params }: Props) {
           <EditScreenDialog screen={{
             id: screen.id,
             name: screen.name,
+            slug: screen.slug,
             description: screen.description,
             token: screen.token,
             intervalSeconds: screen.intervalSeconds,
@@ -87,7 +88,7 @@ export default async function ScreenDetailPage({ params }: Props) {
             showProgressBar: screen.showProgressBar,
           }} />
           <a
-            href={`/player/${screen.token}`}
+            href={`/player/${screen.slug}`}
             target="_blank"
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs text-muted-foreground hover:text-orange hover:bg-orange/10 transition-colors"
           >

@@ -3,14 +3,14 @@ import { notFound } from "next/navigation";
 import { PlayerView } from "@/components/player/player-view";
 
 interface PlayerPageProps {
-  params: Promise<{ token: string }>;
+  params: Promise<{ slug: string }>;
 }
 
 export default async function PlayerPage({ params }: PlayerPageProps) {
-  const { token } = await params;
+  const { slug } = await params;
 
   const screen = await prisma.screen.findUnique({
-    where: { token },
+    where: { slug },
     include: {
       medias: {
         where: { isEnabled: true },
@@ -29,7 +29,7 @@ export default async function PlayerPage({ params }: PlayerPageProps) {
 
   return (
     <PlayerView
-      token={token}
+      token={screen.token}
       screenName={screen.name}
       companyName={screen.company.name}
       intervalSeconds={screen.intervalSeconds}

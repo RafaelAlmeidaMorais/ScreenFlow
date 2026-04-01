@@ -8,16 +8,17 @@ export default async function DashboardPage() {
   const session = await auth();
   if (!session) redirect("/login");
 
-  const companyId = session.user.companyId;
+  const isSuperAdmin = session.user.isSuperAdmin;
+  const companyFilter = isSuperAdmin ? {} : { companyId: session.user.companyId };
 
   const [screens, medias] = await Promise.all([
     prisma.screen.findMany({
-      where: { companyId },
+      where: companyFilter,
       include: { medias: true },
       orderBy: { createdAt: "desc" },
     }),
     prisma.media.findMany({
-      where: { companyId },
+      where: companyFilter,
     }),
   ]);
 
@@ -34,6 +35,7 @@ export default async function DashboardPage() {
   const screenData = screens.map((s) => ({
     id: s.id,
     name: s.name,
+    slug: s.slug,
     description: s.description,
     token: s.token,
     isActive: s.isActive,
@@ -48,7 +50,7 @@ export default async function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground mt-1">
-          Visão geral do seu sistema de telas
+          {isSuperAdmin ? "Visão geral de todas as instituições" : "Visão geral do seu sistema de telas"}
         </p>
       </div>
 

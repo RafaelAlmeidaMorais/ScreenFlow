@@ -32,6 +32,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           email: user.email,
           name: user.name,
           role: user.role,
+          isSuperAdmin: user.isSuperAdmin,
           companyId: user.companyId,
           companyName: user.company.name,
         };
@@ -44,6 +45,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const u = user as any;
         token.role = u.role;
+        token.isSuperAdmin = u.isSuperAdmin;
         token.companyId = u.companyId;
         token.companyName = u.companyName;
       }
@@ -55,6 +57,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const s = session.user as any;
         s.id = token.sub;
         s.role = token.role;
+        s.isSuperAdmin = token.isSuperAdmin;
         s.companyId = token.companyId;
         s.companyName = token.companyName;
       }
