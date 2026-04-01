@@ -29,7 +29,7 @@ export default function LoginPage() {
       setError("Email ou senha inválidos");
       setLoading(false);
     } else {
-      router.push("/dashboard");
+      window.location.href = "/dashboard";
     }
   }
 
