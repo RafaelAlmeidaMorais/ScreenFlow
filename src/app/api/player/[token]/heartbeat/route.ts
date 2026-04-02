@@ -1,11 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   const { token } = await params;
+
+  // Rate limit: 10 heartbeats per minute per token
+  const { ok } = rateLimit(`heartbeat:${token}`, 10, 60_000);
+  if (!ok) {
+    return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
   const body = await req.json().catch(() => ({}));
   const bootedAt = body.bootedAt ? new Date(body.bootedAt) : null;
 

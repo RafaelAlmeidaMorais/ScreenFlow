@@ -5,9 +5,27 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { revalidatePath } from "next/cache";
 
+const ALLOWED_FILE_DOMAINS = [
+  process.env.R2_PUBLIC_URL,
+].filter(Boolean).map((u) => new URL(u!).hostname);
+
+function isAllowedFileUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return ALLOWED_FILE_DOMAINS.includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export async function createMedia(screenId: string, formData: FormData) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
+
+  // Role check: VIEWER cannot create media
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
 
   const title = formData.get("title") as string;
   const fileUrl = formData.get("fileUrl") as string;
@@ -17,16 +35,31 @@ export async function createMedia(screenId: string, formData: FormData) {
   const endDate = formData.get("endDate") as string;
 
   if (!title?.trim()) throw new Error("Título é obrigatório");
+  if (title.trim().length > 200) throw new Error("Título muito longo (máx. 200 caracteres)");
   if (!fileUrl?.trim()) throw new Error("URL do arquivo é obrigatória");
+
+  // Validate fileUrl against allowed domains
+  if (!isAllowedFileUrl(fileUrl.trim())) {
+    throw new Error("URL do arquivo não é permitida");
+  }
+
+  // Clamp duration to valid range
+  const clampedDuration = Math.max(3, Math.min(300, durationSeconds));
+
+  // Verify screenId belongs to user's company (IDOR protection)
+  const screenWhereClause = session.user.isSuperAdmin
+    ? { id: screenId }
+    : { id: screenId, companyId: session.user.companyId };
+
+  const screen = await prisma.screen.findFirst({ where: screenWhereClause });
+  if (!screen) throw new Error("Tela não encontrada");
+
+  const companyId = screen.companyId;
 
   const lastMedia = await prisma.media.findFirst({
     where: { screenId },
     orderBy: { orderIndex: "desc" },
   });
-
-  const companyId = session.user.isSuperAdmin
-    ? ((await prisma.screen.findUnique({ where: { id: screenId }, select: { companyId: true } }))?.companyId ?? session.user.companyId)
-    : session.user.companyId;
 
   const media = await prisma.media.create({
     data: {
@@ -35,7 +68,7 @@ export async function createMedia(screenId: string, formData: FormData) {
       title: title.trim(),
       fileUrl: fileUrl.trim(),
       type: type === "VIDEO" ? "VIDEO" : "IMAGE",
-      durationSeconds,
+      durationSeconds: clampedDuration,
       orderIndex: (lastMedia?.orderIndex ?? -1) + 1,
       startDate: startDate ? new Date(startDate) : new Date(),
       endDate: endDate ? new Date(endDate) : null,
@@ -61,6 +94,10 @@ export async function updateMedia(mediaId: string, screenId: string, formData: F
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
 
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
   const title = formData.get("title") as string;
   const fileUrl = formData.get("fileUrl") as string;
   const type = formData.get("type") as string;
@@ -71,6 +108,10 @@ export async function updateMedia(mediaId: string, screenId: string, formData: F
 
   if (!title?.trim()) throw new Error("Título é obrigatório");
   if (!fileUrl?.trim()) throw new Error("URL do arquivo é obrigatória");
+
+  if (!isAllowedFileUrl(fileUrl.trim())) {
+    throw new Error("URL do arquivo não é permitida");
+  }
 
   const whereClause = session.user.isSuperAdmin
     ? { id: mediaId }
@@ -114,6 +155,10 @@ export async function deleteMedia(mediaId: string, screenId: string) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
 
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
   const whereClause = session.user.isSuperAdmin
     ? { id: mediaId }
     : { id: mediaId, companyId: session.user.companyId };
@@ -140,12 +185,24 @@ export async function copyMedia(mediaId: string, targetScreenId: string, sourceS
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
 
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
   const whereClause = session.user.isSuperAdmin
     ? { id: mediaId }
     : { id: mediaId, companyId: session.user.companyId };
 
   const media = await prisma.media.findFirst({ where: whereClause });
   if (!media) throw new Error("Mídia não encontrada");
+
+  // Validate targetScreenId belongs to user's company (IDOR protection)
+  const targetScreenWhere = session.user.isSuperAdmin
+    ? { id: targetScreenId }
+    : { id: targetScreenId, companyId: session.user.companyId };
+
+  const targetScreen = await prisma.screen.findFirst({ where: targetScreenWhere });
+  if (!targetScreen) throw new Error("Tela de destino não encontrada");
 
   const lastMedia = await prisma.media.findFirst({
     where: { screenId: targetScreenId },
@@ -186,10 +243,9 @@ export async function moveMedia(mediaId: string, targetScreenId: string, sourceS
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
 
-  const lastMedia = await prisma.media.findFirst({
-    where: { screenId: targetScreenId },
-    orderBy: { orderIndex: "desc" },
-  });
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
 
   const whereClause = session.user.isSuperAdmin
     ? { id: mediaId }
@@ -197,6 +253,19 @@ export async function moveMedia(mediaId: string, targetScreenId: string, sourceS
 
   const media = await prisma.media.findFirst({ where: whereClause });
   if (!media) throw new Error("Mídia não encontrada");
+
+  // Validate targetScreenId belongs to user's company (IDOR protection)
+  const targetScreenWhere = session.user.isSuperAdmin
+    ? { id: targetScreenId }
+    : { id: targetScreenId, companyId: session.user.companyId };
+
+  const targetScreen = await prisma.screen.findFirst({ where: targetScreenWhere });
+  if (!targetScreen) throw new Error("Tela de destino não encontrada");
+
+  const lastMedia = await prisma.media.findFirst({
+    where: { screenId: targetScreenId },
+    orderBy: { orderIndex: "desc" },
+  });
 
   await prisma.media.update({
     where: { id: mediaId },

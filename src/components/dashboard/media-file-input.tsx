@@ -40,6 +40,15 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
 
   async function uploadFile(file: File) {
     setError("");
+
+    // Client-side size validation
+    const maxSize = file.type.startsWith("video/") ? 100 * 1024 * 1024 : 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      const maxMB = Math.round(maxSize / (1024 * 1024));
+      setError(`Arquivo muito grande. Máximo: ${maxMB}MB`);
+      return;
+    }
+
     setUploading(true);
     setUploadProgress(0);
     setFileName(file.name);
@@ -61,6 +70,7 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
         body: JSON.stringify({
           filename: file.name,
           contentType: file.type,
+          fileSize: file.size,
         }),
       });
 

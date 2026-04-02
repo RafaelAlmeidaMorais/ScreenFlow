@@ -16,6 +16,9 @@ const r2 = new S3Client({
   },
 });
 
+export const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_VIDEO_SIZE = 100 * 1024 * 1024; // 100MB
+
 export async function getPresignedUploadUrl(
   key: string,
   contentType: string

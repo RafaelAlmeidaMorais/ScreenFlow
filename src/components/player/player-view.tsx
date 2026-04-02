@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface Media {
   id: string;
@@ -20,58 +20,85 @@ interface PlayerViewProps {
   medias: Media[];
 }
 
-export function PlayerView({
-  token,
-  screenName,
-  companyName,
-  intervalSeconds,
-  autoRefreshMinutes,
-  showProgressBar,
-  medias,
-}: PlayerViewProps) {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [cycle, setCycle] = useState(0);
-  const [progress, setProgress] = useState(0);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const bootedAtRef = useRef(new Date().toISOString());
-  const videoErrorCountRef = useRef(0);
+export function PlayerView(props: PlayerViewProps) {
+  var token = props.token;
+  var screenName = props.screenName;
+  var companyName = props.companyName;
+  var intervalSeconds = props.intervalSeconds;
+  var autoRefreshMinutes = props.autoRefreshMinutes;
+  var showProgressBar = props.showProgressBar;
+  var medias = props.medias;
 
-  const current = medias[currentIndex];
-  const duration = current?.type === "VIDEO" ? current.durationSeconds : intervalSeconds;
+  var indexRef = useRef(0);
+  var cycleRef = useRef(0);
+  var timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  var progressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  var progressBarRef = useRef<HTMLDivElement | null>(null);
+  var videoRef = useRef<HTMLVideoElement | null>(null);
+  var bootedAtRef = useRef(new Date().toISOString());
+  var videoErrorCountRef = useRef(0);
 
-  const goNext = useCallback(function () {
-    if (medias.length <= 1) {
-      // Single media: bump cycle to force re-render
-      setCycle(function (c) { return c + 1; });
-    } else {
-      setCurrentIndex(function (prev) { return (prev + 1) % medias.length; });
-    }
-    setProgress(0);
+  // Force re-render trigger
+  var renderState = useState(0);
+  var forceRender = function () {
+    renderState[1](function (n) { return n + 1; });
+  };
+
+  var currentIndex = indexRef.current;
+  var current = medias[currentIndex];
+  var duration = current
+    ? (current.type === "VIDEO" ? current.durationSeconds : intervalSeconds)
+    : intervalSeconds;
+
+  // --- Go to next media ---
+  function goNext() {
+    clearAllTimers();
     videoErrorCountRef.current = 0;
-  }, [medias.length]);
+
+    if (medias.length <= 1) {
+      cycleRef.current = cycleRef.current + 1;
+    } else {
+      indexRef.current = (indexRef.current + 1) % medias.length;
+    }
+
+    forceRender();
+  }
+
+  function clearAllTimers() {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    if (progressTimerRef.current) {
+      clearTimeout(progressTimerRef.current);
+      progressTimerRef.current = null;
+    }
+  }
 
   // --- Heartbeat ---
   useEffect(function () {
-    var heartbeat = function () {
-      fetch("/api/player/" + token + "/heartbeat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bootedAt: bootedAtRef.current }),
-      })
-        .then(function (res) { return res.json(); })
-        .then(function (data) {
-          if (data.shouldRefresh) {
-            window.location.reload();
-          }
-        })
-        .catch(function () { /* ignore */ });
-    };
+    function heartbeat() {
+      try {
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/player/" + token + "/heartbeat", true);
+        xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.onload = function () {
+          try {
+            var data = JSON.parse(xhr.responseText);
+            if (data && data.shouldRefresh) {
+              window.location.reload();
+            }
+          } catch (e) { /* ignore parse errors */ }
+        };
+        xhr.send(JSON.stringify({ bootedAt: bootedAtRef.current }));
+      } catch (e) { /* ignore */ }
+    }
 
-    var initial = setTimeout(heartbeat, 5000);
+    var initialTimer = setTimeout(heartbeat, 5000);
     var interval = setInterval(heartbeat, 30000);
 
     return function () {
-      clearTimeout(initial);
+      clearTimeout(initialTimer);
       clearInterval(interval);
     };
   }, [token]);
@@ -85,37 +112,74 @@ export function PlayerView({
     return function () { clearTimeout(timeout); };
   }, [autoRefreshMinutes]);
 
-  // --- Image slideshow timer ---
+  // --- Image slideshow timer (setTimeout chain, not setInterval) ---
   useEffect(function () {
     if (!current || medias.length === 0) return;
     if (current.type === "VIDEO") return;
-    // Single image: no need to cycle
-    if (medias.length === 1) return;
+    // Single image: no timer needed
+    if (medias.length <= 1) return;
 
-    var tickInterval = 50;
-    var totalTicks = (duration * 1000) / tickInterval;
-    var tick = 0;
+    var cancelled = false;
+    var durationMs = duration * 1000;
+    var startTime = Date.now();
 
-    var timer = setInterval(function () {
-      tick++;
-      setProgress((tick / totalTicks) * 100);
-      if (tick >= totalTicks) {
+    // Progress animation via direct DOM manipulation (no React re-renders)
+    function animateProgress() {
+      if (cancelled) return;
+      var elapsed = Date.now() - startTime;
+      var pct = Math.min((elapsed / durationMs) * 100, 100);
+
+      // Update all progress bars via DOM
+      var bars = document.querySelectorAll("[data-progress-bar]");
+      for (var i = 0; i < bars.length; i++) {
+        var bar = bars[i] as HTMLElement;
+        var barIndex = parseInt(bar.getAttribute("data-progress-bar") || "0", 10);
+        if (barIndex < indexRef.current) {
+          bar.style.width = "100%";
+        } else if (barIndex === indexRef.current) {
+          bar.style.width = pct + "%";
+        } else {
+          bar.style.width = "0%";
+        }
+      }
+
+      if (elapsed < durationMs) {
+        progressTimerRef.current = setTimeout(animateProgress, 50);
+      }
+    }
+
+    // Main advance timer using setTimeout (more reliable than setInterval on WebOS)
+    timerRef.current = setTimeout(function () {
+      if (!cancelled) {
         goNext();
       }
-    }, tickInterval);
+    }, durationMs);
 
-    return function () { clearInterval(timer); };
-  }, [current, currentIndex, cycle, duration, goNext, medias.length]);
+    // Start progress animation
+    if (showProgressBar) {
+      progressTimerRef.current = setTimeout(animateProgress, 50);
+    }
+
+    return function () {
+      cancelled = true;
+      clearAllTimers();
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, cycleRef.current, medias.length, duration, showProgressBar]);
 
   // --- Video error handler ---
   function handleVideoError() {
-    videoErrorCountRef.current++;
+    videoErrorCountRef.current = videoErrorCountRef.current + 1;
     if (videoErrorCountRef.current >= 2) {
       goNext();
     } else {
       if (videoRef.current) {
         videoRef.current.load();
-        videoRef.current.play().catch(function () { goNext(); });
+        try {
+          videoRef.current.play();
+        } catch (e) {
+          goNext();
+        }
       }
     }
   }
@@ -124,31 +188,71 @@ export function PlayerView({
   useEffect(function () {
     if (!current || current.type !== "VIDEO" || !videoRef.current) return;
 
-    var stallTimeout: ReturnType<typeof setTimeout>;
-
-    var handleStall = function () {
-      stallTimeout = setTimeout(function () { goNext(); }, 10000);
-    };
-
-    var handlePlaying = function () {
-      clearTimeout(stallTimeout);
-    };
-
+    var stallTimeout: ReturnType<typeof setTimeout> | null = null;
     var video = videoRef.current;
+
+    function handleStall() {
+      if (stallTimeout) clearTimeout(stallTimeout);
+      stallTimeout = setTimeout(function () { goNext(); }, 10000);
+    }
+
+    function handlePlaying() {
+      if (stallTimeout) {
+        clearTimeout(stallTimeout);
+        stallTimeout = null;
+      }
+    }
+
     video.addEventListener("stalled", handleStall);
     video.addEventListener("waiting", handleStall);
     video.addEventListener("playing", handlePlaying);
 
+    // Max timeout as safety net
     var maxTime = setTimeout(function () { goNext(); }, (current.durationSeconds + 10) * 1000);
 
     return function () {
-      clearTimeout(stallTimeout);
+      if (stallTimeout) clearTimeout(stallTimeout);
       clearTimeout(maxTime);
       video.removeEventListener("stalled", handleStall);
       video.removeEventListener("waiting", handleStall);
       video.removeEventListener("playing", handlePlaying);
     };
-  }, [current, currentIndex, cycle, goNext]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, cycleRef.current]);
+
+  // --- Video progress tracking ---
+  useEffect(function () {
+    if (!current || current.type !== "VIDEO" || !showProgressBar) return;
+    if (!videoRef.current) return;
+
+    var cancelled = false;
+    var video = videoRef.current;
+
+    function updateVideoProgress() {
+      if (cancelled) return;
+      if (video.duration && video.duration > 0) {
+        var pct = (video.currentTime / video.duration) * 100;
+        var bars = document.querySelectorAll("[data-progress-bar]");
+        for (var i = 0; i < bars.length; i++) {
+          var bar = bars[i] as HTMLElement;
+          var barIndex = parseInt(bar.getAttribute("data-progress-bar") || "0", 10);
+          if (barIndex < indexRef.current) {
+            bar.style.width = "100%";
+          } else if (barIndex === indexRef.current) {
+            bar.style.width = pct + "%";
+          } else {
+            bar.style.width = "0%";
+          }
+        }
+      }
+      setTimeout(updateVideoProgress, 100);
+    }
+
+    setTimeout(updateVideoProgress, 200);
+
+    return function () { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentIndex, cycleRef.current, showProgressBar]);
 
   // --- Empty state ---
   if (medias.length === 0) {
@@ -174,11 +278,13 @@ export function PlayerView({
         <div style={{ textAlign: "center" }}>
           <h1 style={{ color: "#fff", fontSize: "24px", fontWeight: "bold" }}>{screenName}</h1>
           <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "14px", marginTop: "8px" }}>{companyName}</p>
-          <p style={{ color: "rgba(255,255,255,0.2)", fontSize: "12px", marginTop: "8px" }}>Nenhuma mídia ativa no momento</p>
+          <p style={{ color: "rgba(255,255,255,0.2)", fontSize: "12px", marginTop: "8px" }}>Nenhuma midia ativa no momento</p>
         </div>
       </div>
     );
   }
+
+  var mediaKey = current.id + "-" + currentIndex + "-" + cycleRef.current;
 
   return (
     <div
@@ -195,10 +301,9 @@ export function PlayerView({
         padding: 0,
       }}
     >
-      {/* Media display */}
       {current.type === "IMAGE" ? (
         <img
-          key={current.id + "-" + currentIndex + "-" + cycle}
+          key={mediaKey}
           src={current.fileUrl}
           alt={current.title}
           style={{
@@ -216,10 +321,10 @@ export function PlayerView({
       ) : (
         <video
           ref={videoRef}
-          key={current.id + "-" + currentIndex + "-" + cycle}
+          key={mediaKey}
           src={current.fileUrl}
-          autoPlay
-          playsInline
+          autoPlay={true}
+          playsInline={true}
           onEnded={goNext}
           onError={handleVideoError}
           style={{
@@ -237,7 +342,7 @@ export function PlayerView({
       )}
 
       {showProgressBar && (
-        <>
+        <div>
           {/* Overlay gradient */}
           <div
             style={{
@@ -275,15 +380,9 @@ export function PlayerView({
               </div>
             </div>
 
-            {/* Progress bar */}
+            {/* Progress bars */}
             <div style={{ display: "flex", gap: "6px", marginTop: "16px" }}>
               {medias.map(function (_, i) {
-                var barWidth = i < currentIndex
-                  ? "100%"
-                  : i === currentIndex
-                  ? progress + "%"
-                  : "0%";
-
                 return (
                   <div
                     key={i}
@@ -296,12 +395,12 @@ export function PlayerView({
                     }}
                   >
                     <div
+                      data-progress-bar={i}
                       style={{
                         height: "100%",
                         borderRadius: "2px",
                         backgroundColor: "#e87b35",
-                        width: barWidth,
-                        transition: "width 100ms linear",
+                        width: i < currentIndex ? "100%" : "0%",
                       }}
                     />
                   </div>
@@ -309,7 +408,7 @@ export function PlayerView({
               })}
             </div>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

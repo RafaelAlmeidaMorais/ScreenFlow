@@ -10,14 +10,25 @@ export async function createScreen(formData: FormData) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
 
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
   const name = formData.get("name") as string;
   const slug = formData.get("slug") as string;
   const description = formData.get("description") as string;
   const intervalSeconds = parseInt(formData.get("intervalSeconds") as string) || 10;
 
   if (!name?.trim()) throw new Error("Nome é obrigatório");
+  if (name.trim().length > 100) throw new Error("Nome muito longo (máx. 100 caracteres)");
 
   const finalSlug = slug?.trim() || generateSlug(name);
+
+  // Validate slug format
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(finalSlug)) {
+    throw new Error("Slug inválido. Use apenas letras minúsculas, números e hífens.");
+  }
+  if (finalSlug.length > 80) throw new Error("Slug muito longo (máx. 80 caracteres)");
 
   // Check slug uniqueness
   const existing = await prisma.screen.findUnique({ where: { slug: finalSlug } });
@@ -55,6 +66,10 @@ export async function updateScreen(screenId: string, formData: FormData) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
 
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
   const name = formData.get("name") as string;
   const slug = formData.get("slug") as string;
   const description = formData.get("description") as string;
@@ -63,7 +78,12 @@ export async function updateScreen(screenId: string, formData: FormData) {
   const showProgressBar = formData.get("showProgressBar") !== "false";
 
   if (!name?.trim()) throw new Error("Nome é obrigatório");
+  if (name.trim().length > 100) throw new Error("Nome muito longo (máx. 100 caracteres)");
   if (!slug?.trim()) throw new Error("Slug é obrigatório");
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug.trim())) {
+    throw new Error("Slug inválido. Use apenas letras minúsculas, números e hífens.");
+  }
+  if (slug.trim().length > 80) throw new Error("Slug muito longo (máx. 80 caracteres)");
 
   // Check slug uniqueness (excluding current screen)
   const existing = await prisma.screen.findUnique({ where: { slug: slug.trim() } });
@@ -114,6 +134,10 @@ export async function refreshScreen(screenId: string) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
 
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
   const whereClause = session.user.isSuperAdmin
     ? { id: screenId }
     : { id: screenId, companyId: session.user.companyId };
@@ -138,6 +162,10 @@ export async function refreshScreen(screenId: string) {
 export async function deleteScreen(screenId: string) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
+
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
 
   const whereClause = session.user.isSuperAdmin
     ? { id: screenId }

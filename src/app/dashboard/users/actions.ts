@@ -24,7 +24,10 @@ export async function createUser(formData: FormData) {
 
   if (!name?.trim()) throw new Error("Nome é obrigatório");
   if (!email?.trim()) throw new Error("Email é obrigatório");
-  if (!password || password.length < 6) throw new Error("Senha deve ter ao menos 6 caracteres");
+  if (!password || password.length < 8) throw new Error("Senha deve ter ao menos 8 caracteres");
+  if (!/[A-Z]/.test(password)) throw new Error("Senha deve conter ao menos uma letra maiúscula");
+  if (!/[a-z]/.test(password)) throw new Error("Senha deve conter ao menos uma letra minúscula");
+  if (!/[0-9]/.test(password)) throw new Error("Senha deve conter ao menos um número");
 
   const existing = await prisma.user.findUnique({ where: { email: email.trim() } });
   if (existing) throw new Error("Email já está em uso");
@@ -95,7 +98,11 @@ export async function updateUser(userId: string, formData: FormData) {
   }
 
   // Update password if provided
-  if (password && password.length >= 6) {
+  if (password) {
+    if (password.length < 8) throw new Error("Senha deve ter ao menos 8 caracteres");
+    if (!/[A-Z]/.test(password)) throw new Error("Senha deve conter ao menos uma letra maiúscula");
+    if (!/[a-z]/.test(password)) throw new Error("Senha deve conter ao menos uma letra minúscula");
+    if (!/[0-9]/.test(password)) throw new Error("Senha deve conter ao menos um número");
     data.password = await bcrypt.hash(password, 12);
   }
 
