@@ -16,9 +16,15 @@ interface Screen {
   showProgressBar: boolean;
   mediaCount: number;
   lastSeenAt: string | null;
+  companyName?: string;
 }
 
-export function ScreenList({ screens }: { screens: Screen[] }) {
+interface Props {
+  screens: Screen[];
+  showCompany?: boolean;
+}
+
+export function ScreenList({ screens, showCompany = false }: Props) {
   if (screens.length === 0) {
     return (
       <div className="rounded-2xl border border-border/50 bg-card/50 p-12 text-center">
@@ -54,6 +60,11 @@ export function ScreenList({ screens }: { screens: Screen[] }) {
                   <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${screen.isActive ? "bg-emerald-400" : "bg-muted-foreground"}`} />
                   {screen.isActive ? "Ativa" : "Inativa"}
                 </Badge>
+                {showCompany && screen.companyName && (
+                  <Badge variant="secondary" className="text-xs bg-muted/50 border-border/50">
+                    {screen.companyName}
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-3 mt-1">
                 <span className="text-xs text-orange/60">/{screen.slug}</span>

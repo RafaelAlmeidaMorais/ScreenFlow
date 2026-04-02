@@ -14,7 +14,7 @@ export default async function DashboardPage() {
   const [screens, medias] = await Promise.all([
     prisma.screen.findMany({
       where: companyFilter,
-      include: { medias: true },
+      include: { medias: true, company: { select: { name: true } } },
       orderBy: { createdAt: "desc" },
     }),
     prisma.media.findMany({
@@ -43,6 +43,7 @@ export default async function DashboardPage() {
     showProgressBar: s.showProgressBar,
     mediaCount: s.medias.length,
     lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
+    companyName: s.company.name,
   }));
 
   return (

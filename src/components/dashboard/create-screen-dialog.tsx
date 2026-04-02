@@ -25,7 +25,7 @@ function toSlug(text: string) {
     .slice(0, 60);
 }
 
-export function CreateScreenDialog() {
+export function CreateScreenDialog({ companyId }: { companyId?: string } = {}) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [name, setName] = useState("");
@@ -47,6 +47,7 @@ export function CreateScreenDialog() {
 
   async function handleSubmit(formData: FormData) {
     formData.set("slug", slug);
+    if (companyId) formData.set("companyId", companyId);
     setLoading(true);
     try {
       await createScreen(formData);

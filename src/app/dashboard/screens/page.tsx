@@ -3,17 +3,26 @@ import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { ScreenList } from "@/components/dashboard/screen-list";
 import { CreateScreenDialog } from "@/components/dashboard/create-screen-dialog";
+import { ScreenCompanyFilter } from "@/components/dashboard/screen-company-filter";
 
-export default async function ScreensPage() {
+interface Props {
+  searchParams: Promise<{ company?: string }>;
+}
+
+export default async function ScreensPage({ searchParams }: Props) {
   const session = await auth();
   if (!session) redirect("/login");
 
+  const { company: companyFilter } = await searchParams;
   const isSuperAdmin = session.user.isSuperAdmin;
-  const companyFilter = isSuperAdmin ? {} : { companyId: session.user.companyId };
+
+  const whereClause = isSuperAdmin
+    ? companyFilter ? { companyId: companyFilter } : {}
+    : { companyId: session.user.companyId };
 
   const screens = await prisma.screen.findMany({
-    where: companyFilter,
-    include: { medias: true },
+    where: whereClause,
+    include: { medias: true, company: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
   });
 
@@ -28,7 +37,13 @@ export default async function ScreensPage() {
     showProgressBar: s.showProgressBar,
     mediaCount: s.medias.length,
     lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
+    companyName: s.company.name,
   }));
+
+  // Get companies for filter (super admin only)
+  const companies = isSuperAdmin
+    ? await prisma.company.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } })
+    : [];
 
   return (
     <div className="space-y-6">
@@ -41,7 +56,12 @@ export default async function ScreensPage() {
         </div>
         <CreateScreenDialog />
       </div>
-      <ScreenList screens={screenData} />
+
+      {isSuperAdmin && companies.length > 1 && (
+        <ScreenCompanyFilter companies={companies} currentFilter={companyFilter || ""} />
+      )}
+
+      <ScreenList screens={screenData} showCompany={isSuperAdmin} />
     </div>
   );
 }
