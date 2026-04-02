@@ -219,7 +219,6 @@ export function PlayerView({
           key={current.id + "-" + currentIndex + "-" + cycle}
           src={current.fileUrl}
           autoPlay
-          muted
           playsInline
           onEnded={goNext}
           onError={handleVideoError}

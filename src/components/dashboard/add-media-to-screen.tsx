@@ -26,16 +26,19 @@ export function AddMediaToScreen({ screenId }: { screenId: string }) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState("IMAGE");
+  const [title, setTitle] = useState("");
   const durationRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   async function handleSubmit(formData: FormData) {
     formData.set("type", type);
+    formData.set("title", title);
     setLoading(true);
     try {
       await createMedia(screenId, formData);
       setOpen(false);
       setType("IMAGE");
+      setTitle("");
       router.refresh();
     } catch {
       alert("Erro ao criar mídia");
@@ -45,7 +48,7 @@ export function AddMediaToScreen({ screenId }: { screenId: string }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setTitle(""); setType("IMAGE"); } }}>
       <DialogTrigger>
         <Button className="bg-orange hover:bg-orange/90 text-orange-foreground font-semibold cursor-pointer">
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
@@ -59,25 +62,33 @@ export function AddMediaToScreen({ screenId }: { screenId: string }) {
           <DialogTitle>Adicionar mídia</DialogTitle>
         </DialogHeader>
         <form action={handleSubmit} className="space-y-4 mt-2">
+          {/* Arquivo primeiro */}
+          <MediaFileInput
+            onFileChange={(_url, detectedType, durationSeconds, suggestedName) => {
+              if (detectedType) setType(detectedType);
+              if (detectedType === "VIDEO" && durationSeconds && durationRef.current) {
+                durationRef.current.value = String(durationSeconds);
+              }
+              // Sugerir nome do arquivo como título (só se vazio)
+              if (suggestedName && !title) {
+                setTitle(suggestedName);
+              }
+            }}
+          />
+
+          {/* Título depois */}
           <div className="space-y-2">
             <Label htmlFor="title">Título</Label>
             <Input
               id="title"
               name="title"
               placeholder="Ex: Banner de boas-vindas"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
               required
               className="bg-background/50 border-border/50"
             />
           </div>
-
-          <MediaFileInput
-            onFileChange={(_url, detectedType, durationSeconds) => {
-              if (detectedType) setType(detectedType);
-              if (detectedType === "VIDEO" && durationSeconds && durationRef.current) {
-                durationRef.current.value = String(durationSeconds);
-              }
-            }}
-          />
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">

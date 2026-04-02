@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 
 interface MediaFileInputProps {
   defaultUrl?: string;
-  onFileChange: (url: string, detectedType: "IMAGE" | "VIDEO" | null, durationSeconds?: number) => void;
+  onFileChange: (url: string, detectedType: "IMAGE" | "VIDEO" | null, durationSeconds?: number, suggestedName?: string) => void;
 }
 
 function getVideoDuration(src: string): Promise<number> {
@@ -24,6 +24,10 @@ function getVideoDuration(src: string): Promise<number> {
   });
 }
 
+function fileNameWithoutExt(name: string): string {
+  return name.replace(/\.[^.]+$/, "").replace(/[-_]/g, " ");
+}
+
 export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInputProps) {
   const [mode, setMode] = useState<"upload" | "url">(defaultUrl ? "url" : "upload");
   const [url, setUrl] = useState(defaultUrl);
@@ -31,16 +35,16 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
   const [uploadProgress, setUploadProgress] = useState(0);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
+  const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  async function uploadFile(file: File) {
     setError("");
     setUploading(true);
     setUploadProgress(0);
     setFileName(file.name);
+
+    const suggestedName = fileNameWithoutExt(file.name);
 
     // Read video duration from local file before upload
     let localDuration: number | undefined;
@@ -50,7 +54,7 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
     }
 
     try {
-      // Step 1: Get presigned URL from our API (small JSON request, no 413)
+      // Step 1: Get presigned URL
       const presignRes = await fetch("/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -68,7 +72,7 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
         return;
       }
 
-      // Step 2: Upload file directly to R2 via presigned URL
+      // Step 2: Upload directly to R2
       const xhr = new XMLHttpRequest();
 
       await new Promise<void>((resolve, reject) => {
@@ -77,28 +81,23 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
             setUploadProgress(Math.round((e.loaded / e.total) * 100));
           }
         };
-
         xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) {
-            resolve();
-          } else {
-            reject(new Error("Upload falhou: " + xhr.status));
-          }
+          if (xhr.status >= 200 && xhr.status < 300) resolve();
+          else reject(new Error("Upload falhou: " + xhr.status));
         };
-
         xhr.onerror = () => reject(new Error("Erro de rede no upload"));
-
         xhr.open("PUT", presignData.uploadUrl);
         xhr.setRequestHeader("Content-Type", file.type);
         xhr.send(file);
       });
 
-      // Step 3: Done — use the public URL
+      // Step 3: Done
       setUrl(presignData.publicUrl);
       onFileChange(
         presignData.publicUrl,
         presignData.type,
-        presignData.type === "VIDEO" ? localDuration : undefined
+        presignData.type === "VIDEO" ? localDuration : undefined,
+        suggestedName
       );
     } catch (err) {
       console.error("Upload error:", err);
@@ -109,18 +108,42 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
     }
   }
 
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadFile(file);
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) uploadFile(file);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setDragging(false);
+  }
+
   async function handleUrlChange(value: string) {
     setUrl(value);
     const isVideo = /\.(mp4|webm|ogg)(\?|$)/i.test(value);
 
     if (isVideo && value) {
-      onFileChange(value, "VIDEO");
+      const name = value.split("/").pop()?.split("?")[0] || "";
+      onFileChange(value, "VIDEO", undefined, fileNameWithoutExt(name));
       const dur = await getVideoDuration(value);
       if (dur > 0) {
-        onFileChange(value, "VIDEO", dur);
+        onFileChange(value, "VIDEO", dur, fileNameWithoutExt(name));
       }
     } else {
-      onFileChange(value, value ? "IMAGE" : null);
+      const name = value.split("/").pop()?.split("?")[0] || "";
+      onFileChange(value, value ? "IMAGE" : null, undefined, value ? fileNameWithoutExt(name) : undefined);
     }
   }
 
@@ -188,9 +211,16 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
           ) : (
             <button
               type="button"
-              onClick={() => inputRef.current?.click()}
+              onClick={() => !uploading && inputRef.current?.click()}
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
               disabled={uploading}
-              className="w-full flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border/50 bg-background/30 p-6 transition-colors hover:border-orange/30 hover:bg-orange/5 cursor-pointer disabled:opacity-50"
+              className={`w-full flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed bg-background/30 p-6 transition-colors cursor-pointer disabled:opacity-50 ${
+                dragging
+                  ? "border-orange bg-orange/10"
+                  : "border-border/50 hover:border-orange/30 hover:bg-orange/5"
+              }`}
             >
               {uploading ? (
                 <>
@@ -208,13 +238,22 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
                     </div>
                   )}
                 </>
+              ) : dragging ? (
+                <>
+                  <svg className="w-8 h-8 text-orange" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                  </svg>
+                  <span className="text-sm text-orange font-medium">
+                    Solte o arquivo aqui
+                  </span>
+                </>
               ) : (
                 <>
                   <svg className="w-8 h-8 text-muted-foreground/50" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
                   </svg>
                   <span className="text-sm text-muted-foreground">
-                    Clique para enviar imagem ou vídeo
+                    Arraste ou clique para enviar
                   </span>
                   <span className="text-xs text-muted-foreground/50">
                     JPG, PNG, WebP, GIF, MP4, WebM — até 100MB
@@ -238,7 +277,6 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
         <p className="text-xs text-destructive">{error}</p>
       )}
 
-      {/* Hidden input to carry the URL value in the form */}
       <input type="hidden" name="fileUrl" value={url} />
     </div>
   );
