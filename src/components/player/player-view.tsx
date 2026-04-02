@@ -30,6 +30,7 @@ export function PlayerView({
   medias,
 }: PlayerViewProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [cycle, setCycle] = useState(0);
   const [progress, setProgress] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const bootedAtRef = useRef(new Date().toISOString());
@@ -38,8 +39,13 @@ export function PlayerView({
   const current = medias[currentIndex];
   const duration = current?.type === "VIDEO" ? current.durationSeconds : intervalSeconds;
 
-  const goNext = useCallback(() => {
-    setCurrentIndex(function (prev) { return (prev + 1) % medias.length; });
+  const goNext = useCallback(function () {
+    if (medias.length <= 1) {
+      // Single media: bump cycle to force re-render
+      setCycle(function (c) { return c + 1; });
+    } else {
+      setCurrentIndex(function (prev) { return (prev + 1) % medias.length; });
+    }
     setProgress(0);
     videoErrorCountRef.current = 0;
   }, [medias.length]);
@@ -83,6 +89,8 @@ export function PlayerView({
   useEffect(function () {
     if (!current || medias.length === 0) return;
     if (current.type === "VIDEO") return;
+    // Single image: no need to cycle
+    if (medias.length === 1) return;
 
     var tickInterval = 50;
     var totalTicks = (duration * 1000) / tickInterval;
@@ -97,7 +105,7 @@ export function PlayerView({
     }, tickInterval);
 
     return function () { clearInterval(timer); };
-  }, [current, currentIndex, duration, goNext, medias.length]);
+  }, [current, currentIndex, cycle, duration, goNext, medias.length]);
 
   // --- Video error handler ---
   function handleVideoError() {
@@ -140,7 +148,7 @@ export function PlayerView({
       video.removeEventListener("waiting", handleStall);
       video.removeEventListener("playing", handlePlaying);
     };
-  }, [current, currentIndex, goNext]);
+  }, [current, currentIndex, cycle, goNext]);
 
   // --- Empty state ---
   if (medias.length === 0) {
@@ -190,7 +198,7 @@ export function PlayerView({
       {/* Media display */}
       {current.type === "IMAGE" ? (
         <img
-          key={current.id + "-" + currentIndex}
+          key={current.id + "-" + currentIndex + "-" + cycle}
           src={current.fileUrl}
           alt={current.title}
           style={{
@@ -208,7 +216,7 @@ export function PlayerView({
       ) : (
         <video
           ref={videoRef}
-          key={current.id + "-" + currentIndex}
+          key={current.id + "-" + currentIndex + "-" + cycle}
           src={current.fileUrl}
           autoPlay
           muted
