@@ -108,7 +108,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
         html += '</div>';
       } else {
         html += '<div class="' + cls + '" data-index="' + i + '">';
-        html += '<video src="' + m.fileUrl + '" playsinline autoplay></video>';
+        html += '<video src="' + m.fileUrl + '" playsinline autoplay muted></video>';
         html += '</div>';
       }
     }
@@ -205,7 +205,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
       var vid = slides[0].getElementsByTagName("video")[0];
       if(vid){
         vid.currentTime = 0;
-        try{ vid.play(); }catch(e){}
+        try{ var p = vid.play(); if(p && p.catch) p.catch(function(){ vid.muted = true; vid.play(); }); }catch(e){ vid.muted = true; try{ vid.play(); }catch(e2){} }
         setupVideoEnd(vid);
       }
     }
@@ -220,7 +220,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
       var vid = slides[0].getElementsByTagName("video")[0];
       if(vid){
         vid.currentTime = 0;
-        try{ vid.play(); }catch(e){}
+        try{ var p = vid.play(); if(p && p.catch) p.catch(function(){ vid.muted = true; vid.play(); }); }catch(e){ vid.muted = true; try{ vid.play(); }catch(e2){} }
         setupVideoEnd(vid);
         startVideoProgress(vid);
       }
