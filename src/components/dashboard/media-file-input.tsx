@@ -25,9 +25,10 @@ function getVideoDuration(src: string): Promise<number> {
 }
 
 export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInputProps) {
-  const [mode, setMode] = useState<"upload" | "url">(defaultUrl && !defaultUrl.startsWith("/uploads") ? "url" : "upload");
+  const [mode, setMode] = useState<"upload" | "url">(defaultUrl ? "url" : "upload");
   const [url, setUrl] = useState(defaultUrl);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,6 +39,7 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
 
     setError("");
     setUploading(true);
+    setUploadProgress(0);
     setFileName(file.name);
 
     // Read video duration from local file before upload
@@ -47,25 +49,63 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
       localDuration = await getVideoDuration(objectUrl);
     }
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const res = await fetch("/api/upload", { method: "POST", body: formData });
-      const data = await res.json();
+      // Step 1: Get presigned URL from our API (small JSON request, no 413)
+      const presignRes = await fetch("/api/upload", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          filename: file.name,
+          contentType: file.type,
+        }),
+      });
 
-      if (!res.ok) {
-        setError(data.error || "Erro no upload");
+      const presignData = await presignRes.json();
+
+      if (!presignRes.ok) {
+        setError(presignData.error || "Erro ao preparar upload");
         setUploading(false);
         return;
       }
 
-      setUrl(data.url);
-      onFileChange(data.url, data.type, data.type === "VIDEO" ? localDuration : undefined);
-    } catch {
+      // Step 2: Upload file directly to R2 via presigned URL
+      const xhr = new XMLHttpRequest();
+
+      await new Promise<void>((resolve, reject) => {
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) {
+            setUploadProgress(Math.round((e.loaded / e.total) * 100));
+          }
+        };
+
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error("Upload falhou: " + xhr.status));
+          }
+        };
+
+        xhr.onerror = () => reject(new Error("Erro de rede no upload"));
+
+        xhr.open("PUT", presignData.uploadUrl);
+        xhr.setRequestHeader("Content-Type", file.type);
+        xhr.send(file);
+      });
+
+      // Step 3: Done — use the public URL
+      setUrl(presignData.publicUrl);
+      onFileChange(
+        presignData.publicUrl,
+        presignData.type,
+        presignData.type === "VIDEO" ? localDuration : undefined
+      );
+    } catch (err) {
+      console.error("Upload error:", err);
       setError("Erro ao enviar arquivo");
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   }
 
@@ -156,6 +196,17 @@ export function MediaFileInput({ defaultUrl = "", onFileChange }: MediaFileInput
                 <>
                   <div className="w-8 h-8 border-2 border-orange/30 border-t-orange rounded-full animate-spin" />
                   <span className="text-sm text-muted-foreground">Enviando {fileName}...</span>
+                  {uploadProgress > 0 && (
+                    <div className="w-full max-w-[200px]">
+                      <div className="h-1.5 rounded-full bg-muted/50 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-orange transition-all duration-200"
+                          style={{ width: uploadProgress + "%" }}
+                        />
+                      </div>
+                      <span className="text-xs text-muted-foreground/60 mt-1">{uploadProgress}%</span>
+                    </div>
+                  )}
                 </>
               ) : (
                 <>
