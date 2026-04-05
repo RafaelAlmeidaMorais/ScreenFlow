@@ -34,13 +34,11 @@ export function CreateCompanyDialog() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger>
-        <Button className="bg-orange hover:bg-orange/90 text-orange-foreground font-semibold cursor-pointer">
+      <DialogTrigger className="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold bg-orange hover:bg-orange/90 text-orange-foreground cursor-pointer">
           <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
           Nova Instituição
-        </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md bg-card border-border/50">
         <DialogHeader>

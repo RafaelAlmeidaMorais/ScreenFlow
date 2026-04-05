@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EditScreenDialog } from "@/components/dashboard/edit-screen-dialog";
 import { AddMediaToScreen } from "@/components/dashboard/add-media-to-screen";
-import { ScreenMediaItem } from "@/components/dashboard/screen-media-item";
+import { MediaSortableList } from "@/components/dashboard/media-sortable-list";
 import { ScreenPlayerControls } from "@/components/dashboard/screen-player-controls";
 
 interface Props {
@@ -118,30 +118,25 @@ export default async function ScreenDetailPage({ params }: Props) {
             <p className="text-muted-foreground/50 text-xs mt-1">Adicione imagens ou vídeos para exibir no player</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {screen.medias.map((media, index) => {
+          <MediaSortableList
+            medias={screen.medias.map((media, index) => {
               const isExpired = media.endDate && new Date(media.endDate) < now;
-              return (
-                <ScreenMediaItem
-                  key={media.id}
-                  media={{
-                    id: media.id,
-                    title: media.title,
-                    fileUrl: media.fileUrl,
-                    type: media.type,
-                    durationSeconds: media.durationSeconds,
-                    startDate: media.startDate.toISOString(),
-                    endDate: media.endDate?.toISOString() ?? null,
-                    isEnabled: media.isEnabled,
-                    orderIndex: index,
-                    isExpired: !!isExpired,
-                  }}
-                  screenId={screen.id}
-                  otherScreens={otherScreens}
-                />
-              );
+              return {
+                id: media.id,
+                title: media.title,
+                fileUrl: media.fileUrl,
+                type: media.type,
+                durationSeconds: media.durationSeconds,
+                startDate: media.startDate.toISOString(),
+                endDate: media.endDate?.toISOString() ?? null,
+                isEnabled: media.isEnabled,
+                orderIndex: index,
+                isExpired: !!isExpired,
+              };
             })}
-          </div>
+            screenId={screen.id}
+            otherScreens={otherScreens}
+          />
         )}
       </div>
 

@@ -181,6 +181,44 @@ export async function deleteMedia(mediaId: string, screenId: string) {
   revalidatePath("/dashboard");
 }
 
+export async function reorderMedias(screenId: string, orderedIds: string[]) {
+  const session = await auth();
+  if (!session) throw new Error("Não autorizado");
+
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
+  // Verify screen belongs to user's company
+  const screenWhereClause = session.user.isSuperAdmin
+    ? { id: screenId }
+    : { id: screenId, companyId: session.user.companyId };
+
+  const screen = await prisma.screen.findFirst({ where: screenWhereClause });
+  if (!screen) throw new Error("Tela não encontrada");
+
+  // Update each media's orderIndex
+  const updates = orderedIds.map((id, index) =>
+    prisma.media.updateMany({
+      where: { id, screenId },
+      data: { orderIndex: index },
+    })
+  );
+
+  await prisma.$transaction(updates);
+
+  await logAudit({
+    userId: session.user.id,
+    companyId: screen.companyId,
+    action: "UPDATE",
+    entity: "SCREEN",
+    entityId: screenId,
+    details: { action: "reorder_medias", count: orderedIds.length },
+  });
+
+  revalidatePath(`/dashboard/screens/${screenId}`);
+}
+
 export async function copyMedia(mediaId: string, targetScreenId: string, sourceScreenId: string) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");

@@ -159,6 +159,81 @@ export async function refreshScreen(screenId: string) {
   revalidatePath(`/dashboard/screens/${screenId}`);
 }
 
+export async function duplicateScreen(screenId: string) {
+  const session = await auth();
+  if (!session) throw new Error("Não autorizado");
+
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
+  const whereClause = session.user.isSuperAdmin
+    ? { id: screenId }
+    : { id: screenId, companyId: session.user.companyId };
+
+  const screen = await prisma.screen.findFirst({
+    where: whereClause,
+    include: { medias: { orderBy: { orderIndex: "asc" } } },
+  });
+
+  if (!screen) throw new Error("Tela não encontrada");
+
+  // Generate unique slug
+  let baseSlug = screen.slug + "-copia";
+  let finalSlug = baseSlug;
+  let attempt = 0;
+  while (await prisma.screen.findUnique({ where: { slug: finalSlug } })) {
+    attempt++;
+    finalSlug = baseSlug + "-" + attempt;
+  }
+
+  const newScreen = await prisma.screen.create({
+    data: {
+      companyId: screen.companyId,
+      name: screen.name + " (Cópia)",
+      slug: finalSlug,
+      description: screen.description,
+      intervalSeconds: screen.intervalSeconds,
+      isActive: screen.isActive,
+      showProgressBar: screen.showProgressBar,
+      autoRefreshMinutes: screen.autoRefreshMinutes,
+    },
+  });
+
+  // Copy all medias
+  if (screen.medias.length > 0) {
+    await prisma.media.createMany({
+      data: screen.medias.map((m) => ({
+        screenId: newScreen.id,
+        companyId: m.companyId,
+        type: m.type,
+        fileUrl: m.fileUrl,
+        title: m.title,
+        durationSeconds: m.durationSeconds,
+        orderIndex: m.orderIndex,
+        startDate: m.startDate,
+        endDate: m.endDate,
+        isEnabled: m.isEnabled,
+        createdById: session.user.id,
+      })),
+    });
+  }
+
+  await logAudit({
+    userId: session.user.id,
+    companyId: screen.companyId,
+    action: "CREATE",
+    entity: "SCREEN",
+    entityId: newScreen.id,
+    details: { name: newScreen.name, slug: newScreen.slug, duplicatedFrom: screen.id, mediasCount: screen.medias.length },
+  });
+
+  revalidatePath("/dashboard/screens");
+  revalidatePath("/dashboard");
+
+  return newScreen.id;
+}
+
 export async function deleteScreen(screenId: string) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");

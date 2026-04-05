@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -119,6 +120,12 @@ export default function LoginPage() {
                 {error}
               </div>
             )}
+
+            <div className="text-right">
+              <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-orange transition-colors">
+                Esqueci minha senha
+              </Link>
+            </div>
 
             <Button
               type="submit"

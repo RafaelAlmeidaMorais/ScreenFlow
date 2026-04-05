@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "player-apk",
+    "slug": "player-apk",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "com.screenflow.player",
+      "permissions": [
+        "RECEIVE_BOOT_COMPLETED",
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ],
+      "intentFilters": [
+        {
+          "action": "MAIN",
+          "category": [
+            "HOME",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "adaptiveIcon": {
+        "backgroundColor": "#000000",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f15a56f5-be9a-4ceb-b84c-83f80b97aed5"
+      }
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}
