@@ -55,6 +55,9 @@ export default async function CompanyDetailPage({ params }: Props) {
     isActive: s.isActive,
     intervalSeconds: s.intervalSeconds,
     showProgressBar: s.showProgressBar,
+    orientation: s.orientation,
+    aspectRatio: s.aspectRatio,
+    layoutTemplate: s.layoutTemplate,
     mediaCount: s.medias.length,
     lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
   }));

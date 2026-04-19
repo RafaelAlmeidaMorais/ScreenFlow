@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/role-guards";
 import { Badge } from "@/components/ui/badge";
 
 const actionLabels: Record<string, string> = {
@@ -36,10 +37,10 @@ function timeAgo(date: Date) {
 export default async function LogsPage() {
   const session = await auth();
   if (!session) redirect("/login");
+  await requireAdmin();
 
   const isSuperAdmin = session.user.isSuperAdmin;
   const isCompanyAdmin = session.user.role === "COMPANY_ADMIN";
-  if (!isSuperAdmin && !isCompanyAdmin) redirect("/dashboard");
 
   const logs = await prisma.auditLog.findMany({
     where: isSuperAdmin ? {} : { companyId: session.user.companyId },
