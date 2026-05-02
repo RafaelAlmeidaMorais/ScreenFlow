@@ -21,7 +21,9 @@
     "react-native-webview": "^13.16.1"
   },
   "devDependencies": {
+    "@types/fs-extra": "^11.0.4",
     "@types/react": "~19.2.2",
+    "fs-extra": "^11.2.0",
     "typescript": "~5.9.2"
   },
   "private": true
