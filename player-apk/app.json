@@ -57,22 +57,7 @@
           }
         }
       ],
-      [
-        "expo-updates",
-        {
-          "username": "screenflow",
-          "projectId": "f15a56f5-be9a-4ceb-b84c-83f80b97aed5"
-        }
-      ],
       "./plugins/withAutoStart"
-    ],
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
-    "updates": {
-      "url": "https://updates.expo.dev/f15a56f5-be9a-4ceb-b84c-83f80b97aed5",
-      "fallbackToCacheTimeout": 0,
-      "checkOnLaunch": "always"
-    }
+    ]
   }
 }

@@ -6,7 +6,6 @@ import * as NavigationBar from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import * as KeepAwake from 'expo-keep-awake';
 import { useKeepAwake } from 'expo-keep-awake';
-import * as Updates from 'expo-updates';
 
 const KEEP_AWAKE_TAG = 'screenflow-player';
 
@@ -74,19 +73,6 @@ export default function App() {
         await NavigationBar.setVisibilityAsync("hidden");
         await NavigationBar.setBehaviorAsync("overlay-swipe");
       } catch (e) {}
-
-      // Check for app updates
-      try {
-        const update = await Updates.checkForUpdateAsync();
-        if (update.isAvailable) {
-          appendLog('Atualização disponível, baixando...', 'WARN');
-          await Updates.fetchUpdateAsync();
-          // Reload to apply update
-          await Updates.reloadAsync();
-        }
-      } catch (e) {
-        appendLog('Erro ao verificar atualizações', 'WARN');
-      }
 
       const savedUrl = await AsyncStorage.getItem('kiosk_url');
       if (savedUrl) {
