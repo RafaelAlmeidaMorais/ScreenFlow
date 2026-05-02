@@ -5,7 +5,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as NavigationBar from 'expo-navigation-bar';
 import { StatusBar } from 'expo-status-bar';
 import * as KeepAwake from 'expo-keep-awake';
+import { useKeepAwake } from 'expo-keep-awake';
 import * as Updates from 'expo-updates';
+
+const KEEP_AWAKE_TAG = 'screenflow-player';
 
 const DEBUG_SCRIPT = `
   (function() {
@@ -24,6 +27,10 @@ const DEBUG_SCRIPT = `
 `;
 
 export default function App() {
+  // Hook-based keep-awake: mantém a tela ligada durante toda a vida do componente.
+  // Esta é a forma recomendada pelo expo-keep-awake e é gerenciada pelo React.
+  useKeepAwake(KEEP_AWAKE_TAG);
+
   const [url, setUrl] = useState<string | null>(null);
   const [inputUrl, setInputUrl] = useState('');
   const [isLoaded, setIsLoaded] = useState(false);
@@ -47,12 +54,20 @@ export default function App() {
   // Init
   useEffect(() => {
     async function prepare() {
+      // Dupla segurança: além do hook useKeepAwake (acima), chamamos a versão
+      // imperativa com tag específica. O hook cobre o ciclo do componente; esta
+      // chamada extra garante que mesmo se o React desmontar/remontar algo, o
+      // wake lock continua ativo.
       try {
-        // Activate keep-awake to prevent screen sleep
-        await KeepAwake.activateKeepAwakeAsync();
-        appendLog('Screen keep-awake ativado');
+        const available = await KeepAwake.isAvailableAsync();
+        if (!available) {
+          appendLog('Keep-awake nao disponivel neste dispositivo', 'WARN');
+        } else {
+          await KeepAwake.activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+          appendLog('Keep-awake ativado (anti-screensaver)');
+        }
       } catch (e) {
-        appendLog('Erro ao ativar keep-awake', 'WARN');
+        appendLog('Erro ao ativar keep-awake: ' + String(e), 'ERROR');
       }
 
       try {
@@ -91,6 +106,29 @@ export default function App() {
       } catch (e) {}
     }, 5000);
     return () => clearInterval(interval);
+  }, []);
+
+  // Rede de seguranca: reativa o keep-awake a cada 60s caso o SO tenha
+  // descartado o wake lock (algumas TV boxes Android sao agressivas com
+  // power management). O hook useKeepAwake ja cuida do caso normal, mas
+  // este intervalo garante recuperacao rapida se algo der errado.
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        await KeepAwake.activateKeepAwakeAsync(KEEP_AWAKE_TAG);
+      } catch (e) {
+        // Falha silenciosa - o hook useKeepAwake continua ativo
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Limpa o keep-awake imperativo ao desmontar o app (boa pratica;
+  // o hook useKeepAwake ja faz cleanup automatico do seu proprio tag).
+  useEffect(() => {
+    return () => {
+      KeepAwake.deactivateKeepAwake(KEEP_AWAKE_TAG).catch(() => {});
+    };
   }, []);
 
   // Watchdog timer - detects unresponsive WebView
@@ -231,6 +269,7 @@ export default function App() {
         mediaPlaybackRequiresUserAction={false}
         allowsInlineMediaPlayback={true}
         mixedContentMode="always"
+        androidLayerType="hardware"
         injectedJavaScript={DEBUG_SCRIPT}
         onMessage={(event) => {
           // Mark that WebView is responding

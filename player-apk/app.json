@@ -19,7 +19,9 @@
       "permissions": [
         "RECEIVE_BOOT_COMPLETED",
         "INTERNET",
-        "ACCESS_NETWORK_STATE"
+        "ACCESS_NETWORK_STATE",
+        "WAKE_LOCK",
+        "DISABLE_KEYGUARD"
       ],
       "intentFilters": [
         {
