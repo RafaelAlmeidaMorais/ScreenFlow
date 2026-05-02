@@ -4,7 +4,19 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
 import { generateSlug } from "@/lib/slug";
+import {
+  LAYOUT_DEFINITIONS,
+  getDefaultSlot,
+  getSlotNames,
+  type AspectRatio,
+  type LayoutTemplate,
+  type Orientation,
+} from "@/lib/layouts";
 import { revalidatePath } from "next/cache";
+
+const VALID_ORIENTATIONS: Orientation[] = ["LANDSCAPE", "PORTRAIT"];
+const VALID_ASPECT_RATIOS: AspectRatio[] = ["AUTO", "16:9", "9:16", "4:3", "1:1"];
+const VALID_LAYOUT_TEMPLATES = Object.keys(LAYOUT_DEFINITIONS) as LayoutTemplate[];
 
 export async function createScreen(formData: FormData) {
   const session = await auth();
@@ -76,6 +88,19 @@ export async function updateScreen(screenId: string, formData: FormData) {
   const intervalSeconds = parseInt(formData.get("intervalSeconds") as string) || 10;
   const isActive = formData.get("isActive") === "true";
   const showProgressBar = formData.get("showProgressBar") !== "false";
+  const orientationRaw = (formData.get("orientation") as string | null)?.trim() || "LANDSCAPE";
+  const aspectRatioRaw = (formData.get("aspectRatio") as string | null)?.trim() || "AUTO";
+  const layoutTemplateRaw = (formData.get("layoutTemplate") as string | null)?.trim() || "FULLSCREEN";
+
+  const orientation = (VALID_ORIENTATIONS as string[]).includes(orientationRaw)
+    ? (orientationRaw as Orientation)
+    : "LANDSCAPE";
+  const aspectRatio = (VALID_ASPECT_RATIOS as string[]).includes(aspectRatioRaw)
+    ? (aspectRatioRaw as AspectRatio)
+    : "AUTO";
+  const layoutTemplate = (VALID_LAYOUT_TEMPLATES as string[]).includes(layoutTemplateRaw)
+    ? (layoutTemplateRaw as LayoutTemplate)
+    : "FULLSCREEN";
 
   if (!name?.trim()) throw new Error("Nome é obrigatório");
   if (name.trim().length > 100) throw new Error("Nome muito longo (máx. 100 caracteres)");
@@ -96,16 +121,39 @@ export async function updateScreen(screenId: string, formData: FormData) {
   const oldScreen = await prisma.screen.findFirst({ where: whereClause });
   if (!oldScreen) throw new Error("Tela não encontrada");
 
-  const screen = await prisma.screen.update({
-    where: { id: screenId },
-    data: {
-      name: name.trim(),
-      slug: slug.trim(),
-      description: description?.trim() || null,
-      intervalSeconds,
-      isActive,
-      showProgressBar,
-    },
+  const templateChanged = oldScreen.layoutTemplate !== layoutTemplate;
+
+  const screen = await prisma.$transaction(async (tx) => {
+    const updated = await tx.screen.update({
+      where: { id: screenId },
+      data: {
+        name: name.trim(),
+        slug: slug.trim(),
+        description: description?.trim() || null,
+        intervalSeconds,
+        isActive,
+        showProgressBar,
+        orientation,
+        aspectRatio,
+        layoutTemplate,
+      },
+    });
+
+    // If the layout template changed, move any medias whose current
+    // slot no longer exists in the new template to the default slot.
+    if (templateChanged) {
+      const validSlots = getSlotNames(layoutTemplate);
+      const defaultSlot = getDefaultSlot(layoutTemplate);
+      await tx.media.updateMany({
+        where: {
+          screenId,
+          slot: { notIn: validSlots },
+        },
+        data: { slot: defaultSlot },
+      });
+    }
+
+    return updated;
   });
 
   // Build changes for audit
@@ -115,6 +163,9 @@ export async function updateScreen(screenId: string, formData: FormData) {
   if (oldScreen.isActive !== screen.isActive) changes.isActive = { from: oldScreen.isActive, to: screen.isActive };
   if (oldScreen.showProgressBar !== screen.showProgressBar) changes.showProgressBar = { from: oldScreen.showProgressBar, to: screen.showProgressBar };
   if (oldScreen.intervalSeconds !== screen.intervalSeconds) changes.intervalSeconds = { from: oldScreen.intervalSeconds, to: screen.intervalSeconds };
+  if (oldScreen.orientation !== screen.orientation) changes.orientation = { from: oldScreen.orientation, to: screen.orientation };
+  if (oldScreen.aspectRatio !== screen.aspectRatio) changes.aspectRatio = { from: oldScreen.aspectRatio, to: screen.aspectRatio };
+  if (oldScreen.layoutTemplate !== screen.layoutTemplate) changes.layoutTemplate = { from: oldScreen.layoutTemplate, to: screen.layoutTemplate };
 
   await logAudit({
     userId: session.user.id,
@@ -197,6 +248,9 @@ export async function duplicateScreen(screenId: string) {
       isActive: screen.isActive,
       showProgressBar: screen.showProgressBar,
       autoRefreshMinutes: screen.autoRefreshMinutes,
+      orientation: screen.orientation,
+      aspectRatio: screen.aspectRatio,
+      layoutTemplate: screen.layoutTemplate,
     },
   });
 
@@ -211,6 +265,7 @@ export async function duplicateScreen(screenId: string) {
         title: m.title,
         durationSeconds: m.durationSeconds,
         orderIndex: m.orderIndex,
+        slot: m.slot,
         startDate: m.startDate,
         endDate: m.endDate,
         isEnabled: m.isEnabled,

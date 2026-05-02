@@ -1,12 +1,14 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { requireNotPriceEditor } from "@/lib/role-guards";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { ScreenList } from "@/components/dashboard/screen-list";
 
 export default async function DashboardPage() {
   const session = await auth();
   if (!session) redirect("/login");
+  await requireNotPriceEditor();
 
   const isSuperAdmin = session.user.isSuperAdmin;
   const companyFilter = isSuperAdmin ? {} : { companyId: session.user.companyId };
@@ -41,6 +43,9 @@ export default async function DashboardPage() {
     isActive: s.isActive,
     intervalSeconds: s.intervalSeconds,
     showProgressBar: s.showProgressBar,
+    orientation: s.orientation,
+    aspectRatio: s.aspectRatio,
+    layoutTemplate: s.layoutTemplate,
     mediaCount: s.medias.length,
     lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
     companyName: s.company.name,

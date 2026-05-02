@@ -49,11 +49,33 @@ model Screen {
   refreshRequestedAt DateTime?
   autoRefreshMinutes Int       @default(360)
   showProgressBar    Boolean   @default(true)
+  orientation        String    @default("LANDSCAPE")
+  aspectRatio        String    @default("AUTO")
+  layoutTemplate     String    @default("FULLSCREEN")
   createdAt          DateTime  @default(now())
   company            Company   @relation(fields: [companyId], references: [id])
   medias             Media[]
+  widgets            ScreenWidget[]
 
   @@map("screens")
+}
+
+model ScreenWidget {
+  id         String   @id @default(cuid())
+  screenId   String
+  companyId  String
+  slot       String   @default("main")
+  type       String
+  config     Json
+  orderIndex Int      @default(0)
+  isEnabled  Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  screen     Screen   @relation(fields: [screenId], references: [id], onDelete: Cascade)
+
+  @@index([screenId, slot])
+  @@index([companyId])
+  @@map("screen_widgets")
 }
 
 model Media {
@@ -65,6 +87,7 @@ model Media {
   title           String
   durationSeconds Int       @default(10)
   orderIndex      Int       @default(0)
+  slot            String    @default("main")
   startDate       DateTime  @default(now())
   endDate         DateTime?
   isEnabled       Boolean   @default(true)

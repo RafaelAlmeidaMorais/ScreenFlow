@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/audit";
+import { getDefaultSlot, isValidSlot } from "@/lib/layouts";
 import { revalidatePath } from "next/cache";
 
 const ALLOWED_FILE_DOMAINS = [
@@ -33,6 +34,7 @@ export async function createMedia(screenId: string, formData: FormData) {
   const durationSeconds = parseInt(formData.get("durationSeconds") as string) || 10;
   const startDate = formData.get("startDate") as string;
   const endDate = formData.get("endDate") as string;
+  const slotRaw = (formData.get("slot") as string | null)?.trim() || "";
 
   if (!title?.trim()) throw new Error("Título é obrigatório");
   if (title.trim().length > 200) throw new Error("Título muito longo (máx. 200 caracteres)");
@@ -56,8 +58,15 @@ export async function createMedia(screenId: string, formData: FormData) {
 
   const companyId = screen.companyId;
 
+  // Resolve slot: use provided if valid for this screen's template,
+  // otherwise fall back to the template's default slot.
+  const slot = slotRaw && isValidSlot(screen.layoutTemplate, slotRaw)
+    ? slotRaw
+    : getDefaultSlot(screen.layoutTemplate);
+
+  // orderIndex is per-slot so items stack correctly inside each zone.
   const lastMedia = await prisma.media.findFirst({
-    where: { screenId },
+    where: { screenId, slot },
     orderBy: { orderIndex: "desc" },
   });
 
@@ -70,6 +79,7 @@ export async function createMedia(screenId: string, formData: FormData) {
       type: type === "VIDEO" ? "VIDEO" : "IMAGE",
       durationSeconds: clampedDuration,
       orderIndex: (lastMedia?.orderIndex ?? -1) + 1,
+      slot,
       startDate: startDate ? new Date(startDate) : new Date(),
       endDate: endDate ? new Date(endDate) : null,
       isEnabled: true,
@@ -181,7 +191,11 @@ export async function deleteMedia(mediaId: string, screenId: string) {
   revalidatePath("/dashboard");
 }
 
-export async function reorderMedias(screenId: string, orderedIds: string[]) {
+export async function reorderMedias(
+  screenId: string,
+  orderedIds: string[],
+  slot?: string,
+) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
 
@@ -197,10 +211,11 @@ export async function reorderMedias(screenId: string, orderedIds: string[]) {
   const screen = await prisma.screen.findFirst({ where: screenWhereClause });
   if (!screen) throw new Error("Tela não encontrada");
 
-  // Update each media's orderIndex
+  // Scope reorder to the given slot when provided (prevents cross-slot
+  // orderIndex collisions). When slot is omitted, behaves as legacy.
   const updates = orderedIds.map((id, index) =>
     prisma.media.updateMany({
-      where: { id, screenId },
+      where: slot ? { id, screenId, slot } : { id, screenId },
       data: { orderIndex: index },
     })
   );
@@ -213,7 +228,67 @@ export async function reorderMedias(screenId: string, orderedIds: string[]) {
     action: "UPDATE",
     entity: "SCREEN",
     entityId: screenId,
-    details: { action: "reorder_medias", count: orderedIds.length },
+    details: { action: "reorder_medias", count: orderedIds.length, slot: slot ?? null },
+  });
+
+  revalidatePath(`/dashboard/screens/${screenId}`);
+}
+
+export async function moveMediaToSlot(
+  mediaId: string,
+  screenId: string,
+  targetSlot: string,
+) {
+  const session = await auth();
+  if (!session) throw new Error("Não autorizado");
+
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
+  const whereClause = session.user.isSuperAdmin
+    ? { id: mediaId }
+    : { id: mediaId, companyId: session.user.companyId };
+
+  const media = await prisma.media.findFirst({ where: whereClause });
+  if (!media) throw new Error("Mídia não encontrada");
+
+  // Verify screen and validate target slot against its layout template
+  const screenWhere = session.user.isSuperAdmin
+    ? { id: screenId }
+    : { id: screenId, companyId: session.user.companyId };
+
+  const screen = await prisma.screen.findFirst({ where: screenWhere });
+  if (!screen) throw new Error("Tela não encontrada");
+  if (media.screenId !== screen.id) throw new Error("Mídia não pertence a esta tela");
+
+  if (!isValidSlot(screen.layoutTemplate, targetSlot)) {
+    throw new Error("Slot inválido para o layout atual");
+  }
+
+  if (media.slot === targetSlot) return;
+
+  // Append to the end of the target slot
+  const lastMedia = await prisma.media.findFirst({
+    where: { screenId, slot: targetSlot },
+    orderBy: { orderIndex: "desc" },
+  });
+
+  await prisma.media.update({
+    where: { id: mediaId },
+    data: {
+      slot: targetSlot,
+      orderIndex: (lastMedia?.orderIndex ?? -1) + 1,
+    },
+  });
+
+  await logAudit({
+    userId: session.user.id,
+    companyId: media.companyId,
+    action: "UPDATE",
+    entity: "MEDIA",
+    entityId: mediaId,
+    details: { action: "move_to_slot", from: media.slot, to: targetSlot },
   });
 
   revalidatePath(`/dashboard/screens/${screenId}`);

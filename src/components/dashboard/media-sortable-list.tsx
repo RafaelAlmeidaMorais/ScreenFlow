@@ -27,9 +27,10 @@ interface Props {
   medias: MediaData[];
   screenId: string;
   otherScreens: OtherScreen[];
+  slot?: string;
 }
 
-export function MediaSortableList({ medias: initialMedias, screenId, otherScreens }: Props) {
+export function MediaSortableList({ medias: initialMedias, screenId, otherScreens, slot }: Props) {
   const [medias, setMedias] = useState(initialMedias);
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -85,7 +86,7 @@ export function MediaSortableList({ medias: initialMedias, screenId, otherScreen
     // Save to server
     setSaving(true);
     try {
-      await reorderMedias(screenId, reindexed.map((m) => m.id));
+      await reorderMedias(screenId, reindexed.map((m) => m.id), slot);
       router.refresh();
     } catch {
       // Revert on error

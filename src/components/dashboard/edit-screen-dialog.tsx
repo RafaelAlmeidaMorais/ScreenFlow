@@ -15,6 +15,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { LayoutPreview } from "@/components/dashboard/layout-preview";
+import {
+  ASPECT_RATIOS,
+  LAYOUT_DEFINITIONS,
+  LAYOUT_TEMPLATES,
+  ORIENTATIONS,
+} from "@/lib/layouts";
 
 interface ScreenData {
   id: string;
@@ -25,6 +32,9 @@ interface ScreenData {
   intervalSeconds: number;
   isActive: boolean;
   showProgressBar: boolean;
+  orientation: string;
+  aspectRatio: string;
+  layoutTemplate: string;
 }
 
 export function EditScreenDialog({ screen }: { screen: ScreenData }) {
@@ -33,12 +43,20 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
   const [deleting, setDeleting] = useState(false);
   const [isActive, setIsActive] = useState(screen.isActive);
   const [showProgressBar, setShowProgressBar] = useState(screen.showProgressBar);
+  const [orientation, setOrientation] = useState(screen.orientation || "LANDSCAPE");
+  const [aspectRatio, setAspectRatio] = useState(screen.aspectRatio || "AUTO");
+  const [layoutTemplate, setLayoutTemplate] = useState(
+    screen.layoutTemplate || "FULLSCREEN",
+  );
   const [copied, setCopied] = useState(false);
   const router = useRouter();
 
   async function handleSubmit(formData: FormData) {
     formData.set("isActive", String(isActive));
     formData.set("showProgressBar", String(showProgressBar));
+    formData.set("orientation", orientation);
+    formData.set("aspectRatio", aspectRatio);
+    formData.set("layoutTemplate", layoutTemplate);
     setLoading(true);
     try {
       await updateScreen(screen.id, formData);
@@ -130,6 +148,60 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
               max={120}
               className="bg-background/50 border-border/50"
             />
+          </div>
+
+          {/* Layout / orientation / aspect ratio */}
+          <div className="space-y-3 rounded-xl border border-border/50 bg-background/50 px-4 py-3">
+            <p className="text-sm font-medium">Layout e exibição</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="orientation" className="text-xs">Orientação</Label>
+                <select
+                  id="orientation"
+                  value={orientation}
+                  onChange={(e) => setOrientation(e.target.value)}
+                  className="w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm cursor-pointer"
+                >
+                  {ORIENTATIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="aspectRatio" className="text-xs">Proporção</Label>
+                <select
+                  id="aspectRatio"
+                  value={aspectRatio}
+                  onChange={(e) => setAspectRatio(e.target.value)}
+                  className="w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm cursor-pointer"
+                >
+                  {ASPECT_RATIOS.map((a) => (
+                    <option key={a.value} value={a.value}>{a.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="layoutTemplate" className="text-xs">Layout da tela</Label>
+              <select
+                id="layoutTemplate"
+                value={layoutTemplate}
+                onChange={(e) => setLayoutTemplate(e.target.value)}
+                className="w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm cursor-pointer"
+              >
+                {LAYOUT_TEMPLATES.map((t) => (
+                  <option key={t} value={t}>{LAYOUT_DEFINITIONS[t].label}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                {LAYOUT_DEFINITIONS[layoutTemplate as keyof typeof LAYOUT_DEFINITIONS]?.description}
+              </p>
+            </div>
+
+            <div className="pt-1">
+              <LayoutPreview template={layoutTemplate} orientation={orientation as "LANDSCAPE" | "PORTRAIT"} />
+            </div>
           </div>
 
           <div className="flex items-center justify-between rounded-xl border border-border/50 bg-background/50 px-4 py-3">

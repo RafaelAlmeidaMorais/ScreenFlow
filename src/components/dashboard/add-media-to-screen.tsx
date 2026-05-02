@@ -22,23 +22,45 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 
-export function AddMediaToScreen({ screenId }: { screenId: string }) {
+interface SlotOption {
+  name: string;
+  label: string;
+}
+
+interface AddMediaToScreenProps {
+  screenId: string;
+  slots?: SlotOption[];
+  defaultSlot?: string;
+  triggerLabel?: string;
+  compact?: boolean;
+}
+
+export function AddMediaToScreen({
+  screenId,
+  slots = [{ name: "main", label: "Principal" }],
+  defaultSlot,
+  triggerLabel = "Nova Mídia",
+  compact = false,
+}: AddMediaToScreenProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState("IMAGE");
   const [title, setTitle] = useState("");
+  const [slot, setSlot] = useState<string>(defaultSlot ?? slots[0]?.name ?? "main");
   const durationRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
 
   async function handleSubmit(formData: FormData) {
     formData.set("type", type);
     formData.set("title", title);
+    formData.set("slot", slot);
     setLoading(true);
     try {
       await createMedia(screenId, formData);
       setOpen(false);
       setType("IMAGE");
       setTitle("");
+      setSlot(defaultSlot ?? slots[0]?.name ?? "main");
       router.refresh();
     } catch {
       alert("Erro ao criar mídia");
@@ -48,12 +70,18 @@ export function AddMediaToScreen({ screenId }: { screenId: string }) {
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setTitle(""); setType("IMAGE"); } }}>
-      <DialogTrigger className="inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold bg-orange hover:bg-orange/90 text-orange-foreground cursor-pointer">
-          <svg className="w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v) { setTitle(""); setType("IMAGE"); setSlot(defaultSlot ?? slots[0]?.name ?? "main"); } }}>
+      <DialogTrigger
+        className={
+          compact
+            ? "inline-flex items-center justify-center rounded-md px-3 py-1.5 text-xs font-medium text-orange hover:bg-orange/10 cursor-pointer"
+            : "inline-flex items-center justify-center rounded-md px-4 py-2 text-sm font-semibold bg-orange hover:bg-orange/90 text-orange-foreground cursor-pointer"
+        }
+      >
+          <svg className="w-4 h-4 mr-1.5" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          Nova Mídia
+          {triggerLabel}
       </DialogTrigger>
       <DialogContent className="sm:max-w-lg bg-card border-border/50">
         <DialogHeader>
@@ -87,6 +115,22 @@ export function AddMediaToScreen({ screenId }: { screenId: string }) {
               className="bg-background/50 border-border/50"
             />
           </div>
+
+          {slots.length > 1 && (
+            <div className="space-y-2">
+              <Label>Zona da tela</Label>
+              <Select value={slot} onValueChange={(v) => v && setSlot(v)}>
+                <SelectTrigger className="bg-background/50 border-border/50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {slots.map((s) => (
+                    <SelectItem key={s.name} value={s.name}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
