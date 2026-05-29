@@ -6,6 +6,12 @@ import { logAudit } from "@/lib/audit";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 
+const VALID_ROLES = new Set(["COMPANY_ADMIN", "VIEWER", "PRICE_EDITOR"]);
+function normalizeRole(role: string | null | undefined): string {
+  if (typeof role === "string" && VALID_ROLES.has(role)) return role;
+  return "VIEWER";
+}
+
 export async function createUser(formData: FormData) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
@@ -40,7 +46,7 @@ export async function createUser(formData: FormData) {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       password: hashedPassword,
-      role: role === "COMPANY_ADMIN" ? "COMPANY_ADMIN" : "VIEWER",
+      role: normalizeRole(role),
     },
   });
 
@@ -94,7 +100,7 @@ export async function updateUser(userId: string, formData: FormData) {
 
   // Only admins can change roles
   if ((isSuperAdmin || isCompanyAdmin) && role && !isSelf) {
-    data.role = role === "COMPANY_ADMIN" ? "COMPANY_ADMIN" : "VIEWER";
+    data.role = normalizeRole(role);
   }
 
   // Update password if provided

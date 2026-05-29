@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 
 export type AuditAction = "CREATE" | "UPDATE" | "DELETE";
-export type AuditEntity = "COMPANY" | "USER" | "SCREEN" | "MEDIA";
+export type AuditEntity = "COMPANY" | "USER" | "SCREEN" | "MEDIA" | "WIDGET";
 
 export async function logAudit(params: {
   userId: string;

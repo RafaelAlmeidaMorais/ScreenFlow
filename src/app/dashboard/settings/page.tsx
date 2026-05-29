@@ -1,9 +1,11 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { requireNotPriceEditor } from "@/lib/role-guards";
 
 export default async function SettingsPage() {
   const session = await auth();
   if (!session) redirect("/login");
+  await requireNotPriceEditor();
 
   return (
     <div className="space-y-6">

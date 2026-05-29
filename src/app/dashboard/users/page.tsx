@@ -1,17 +1,17 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/role-guards";
 import { UserList } from "@/components/dashboard/user-list";
 import { CreateUserDialog } from "@/components/dashboard/create-user-dialog";
 
 export default async function UsersPage() {
   const session = await auth();
   if (!session) redirect("/login");
+  await requireAdmin();
 
   const isSuperAdmin = session.user.isSuperAdmin;
   const isCompanyAdmin = session.user.role === "COMPANY_ADMIN";
-
-  if (!isSuperAdmin && !isCompanyAdmin) redirect("/dashboard");
 
   const users = await prisma.user.findMany({
     where: isSuperAdmin ? {} : { companyId: session.user.companyId },

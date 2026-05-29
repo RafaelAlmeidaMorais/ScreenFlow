@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { requireNotPriceEditor } from "@/lib/role-guards";
 import { ScreenList } from "@/components/dashboard/screen-list";
 import { CreateScreenDialog } from "@/components/dashboard/create-screen-dialog";
 import { ScreenCompanyFilter } from "@/components/dashboard/screen-company-filter";
@@ -12,6 +13,7 @@ interface Props {
 export default async function ScreensPage({ searchParams }: Props) {
   const session = await auth();
   if (!session) redirect("/login");
+  await requireNotPriceEditor();
 
   const { company: companyFilter } = await searchParams;
   const isSuperAdmin = session.user.isSuperAdmin;
@@ -35,6 +37,9 @@ export default async function ScreensPage({ searchParams }: Props) {
     isActive: s.isActive,
     intervalSeconds: s.intervalSeconds,
     showProgressBar: s.showProgressBar,
+    orientation: s.orientation,
+    aspectRatio: s.aspectRatio,
+    layoutTemplate: s.layoutTemplate,
     mediaCount: s.medias.length,
     lastSeenAt: s.lastSeenAt?.toISOString() ?? null,
     companyName: s.company.name,

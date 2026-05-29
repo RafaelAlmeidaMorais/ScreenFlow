@@ -17,6 +17,9 @@ interface Screen {
   isActive: boolean;
   intervalSeconds: number;
   showProgressBar: boolean;
+  orientation: string;
+  aspectRatio: string;
+  layoutTemplate: string;
   mediaCount: number;
   lastSeenAt: string | null;
   companyName?: string;
