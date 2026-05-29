@@ -8,10 +8,12 @@ import {
   LAYOUT_DEFINITIONS,
   getDefaultSlot,
   getSlotNames,
+  validateLayoutTree,
   type AspectRatio,
   type LayoutTemplate,
   type Orientation,
 } from "@/lib/layouts";
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 
 const VALID_ORIENTATIONS: Orientation[] = ["LANDSCAPE", "PORTRAIT"];
@@ -91,6 +93,7 @@ export async function updateScreen(screenId: string, formData: FormData) {
   const orientationRaw = (formData.get("orientation") as string | null)?.trim() || "LANDSCAPE";
   const aspectRatioRaw = (formData.get("aspectRatio") as string | null)?.trim() || "AUTO";
   const layoutTemplateRaw = (formData.get("layoutTemplate") as string | null)?.trim() || "FULLSCREEN";
+  const customLayoutRaw = formData.get("customLayout") as string | null;
 
   const orientation = (VALID_ORIENTATIONS as string[]).includes(orientationRaw)
     ? (orientationRaw as Orientation)
@@ -101,6 +104,19 @@ export async function updateScreen(screenId: string, formData: FormData) {
   const layoutTemplate = (VALID_LAYOUT_TEMPLATES as string[]).includes(layoutTemplateRaw)
     ? (layoutTemplateRaw as LayoutTemplate)
     : "FULLSCREEN";
+
+  let customLayout: { tree: ReturnType<typeof validateLayoutTree> } | null = null;
+  if (layoutTemplate === "CUSTOM" && customLayoutRaw) {
+    try {
+      const parsed = JSON.parse(customLayoutRaw);
+      if (parsed && parsed.tree) {
+        const tree = validateLayoutTree(parsed.tree);
+        customLayout = { tree };
+      }
+    } catch {
+      // Invalid custom layout, ignore
+    }
+  }
 
   if (!name?.trim()) throw new Error("Nome é obrigatório");
   if (name.trim().length > 100) throw new Error("Nome muito longo (máx. 100 caracteres)");
@@ -136,14 +152,17 @@ export async function updateScreen(screenId: string, formData: FormData) {
         orientation,
         aspectRatio,
         layoutTemplate,
+        customLayout: layoutTemplate === "CUSTOM" && customLayout
+          ? (customLayout as unknown as Prisma.InputJsonValue)
+          : layoutTemplate === "CUSTOM" ? Prisma.JsonNull : undefined,
       },
     });
 
     // If the layout template changed, move any medias whose current
     // slot no longer exists in the new template to the default slot.
     if (templateChanged) {
-      const validSlots = getSlotNames(layoutTemplate);
-      const defaultSlot = getDefaultSlot(layoutTemplate);
+      const validSlots = getSlotNames(layoutTemplate, customLayout);
+      const defaultSlot = getDefaultSlot(layoutTemplate, customLayout);
       await tx.media.updateMany({
         where: {
           screenId,
@@ -251,6 +270,7 @@ export async function duplicateScreen(screenId: string) {
       orientation: screen.orientation,
       aspectRatio: screen.aspectRatio,
       layoutTemplate: screen.layoutTemplate,
+      customLayout: screen.customLayout === null ? Prisma.JsonNull : (screen.customLayout as Prisma.InputJsonValue),
     },
   });
 

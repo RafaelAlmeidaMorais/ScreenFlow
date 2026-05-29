@@ -51,9 +51,9 @@ export async function createWidget(
   if (!screen) throw new Error("Tela não encontrada");
 
   // Validate slot against the screen's current layout
-  const targetSlot = isValidSlot(screen.layoutTemplate, slot)
+  const targetSlot = isValidSlot(screen.layoutTemplate, slot, screen.customLayout)
     ? slot
-    : getDefaultSlot(screen.layoutTemplate);
+    : getDefaultSlot(screen.layoutTemplate, screen.customLayout);
 
   // Slot may not contain media + widget at the same time
   const existingMedia = await prisma.media.findFirst({

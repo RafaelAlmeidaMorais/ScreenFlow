@@ -11,12 +11,14 @@ export function LayoutPreview({
   template,
   orientation = "LANDSCAPE",
   className = "",
+  customLayout,
 }: {
   template: string;
   orientation?: "LANDSCAPE" | "PORTRAIT";
   className?: string;
+  customLayout?: unknown;
 }) {
-  const def = getLayoutDefinition(template);
+  const def = getLayoutDefinition(template, customLayout);
 
   // Portrait swaps width/height proportions visually
   const isPortrait = orientation === "PORTRAIT";

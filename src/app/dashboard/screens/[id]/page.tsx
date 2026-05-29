@@ -44,7 +44,7 @@ export default async function ScreenDetailPage({ params }: Props) {
 
   const now = new Date();
 
-  const layout = getLayoutDefinition(screen.layoutTemplate);
+  const layout = getLayoutDefinition(screen.layoutTemplate, screen.customLayout);
   const slotOptions = layout.slots.map((s) => ({ name: s.name, label: s.label }));
   const isSingleSlot = layout.slots.length === 1;
 
@@ -116,6 +116,7 @@ export default async function ScreenDetailPage({ params }: Props) {
             orientation: screen.orientation,
             aspectRatio: screen.aspectRatio,
             layoutTemplate: screen.layoutTemplate,
+            customLayout: (screen.customLayout ?? undefined) as import("@/lib/layouts").CustomLayoutConfig | undefined,
           }} />
           <a
             href={`/player/${screen.slug}`}

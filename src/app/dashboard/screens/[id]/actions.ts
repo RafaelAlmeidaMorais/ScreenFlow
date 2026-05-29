@@ -60,9 +60,9 @@ export async function createMedia(screenId: string, formData: FormData) {
 
   // Resolve slot: use provided if valid for this screen's template,
   // otherwise fall back to the template's default slot.
-  const slot = slotRaw && isValidSlot(screen.layoutTemplate, slotRaw)
+  const slot = slotRaw && isValidSlot(screen.layoutTemplate, slotRaw, screen.customLayout)
     ? slotRaw
-    : getDefaultSlot(screen.layoutTemplate);
+    : getDefaultSlot(screen.layoutTemplate, screen.customLayout);
 
   // orderIndex is per-slot so items stack correctly inside each zone.
   const lastMedia = await prisma.media.findFirst({
@@ -262,7 +262,7 @@ export async function moveMediaToSlot(
   if (!screen) throw new Error("Tela não encontrada");
   if (media.screenId !== screen.id) throw new Error("Mídia não pertence a esta tela");
 
-  if (!isValidSlot(screen.layoutTemplate, targetSlot)) {
+  if (!isValidSlot(screen.layoutTemplate, targetSlot, screen.customLayout)) {
     throw new Error("Slot inválido para o layout atual");
   }
 

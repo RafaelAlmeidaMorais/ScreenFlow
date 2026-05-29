@@ -35,7 +35,7 @@ export async function GET(
     (m) => !m.endDate || new Date(m.endDate) > now
   );
 
-  const layout = getLayoutDefinition(screen.layoutTemplate);
+  const layout = getLayoutDefinition(screen.layoutTemplate, screen.customLayout);
   const isSingleSlot = layout.slots.length === 1;
 
   // Build a zone for every slot in the template, placing its medias inside.

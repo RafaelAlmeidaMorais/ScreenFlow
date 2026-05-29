@@ -16,7 +16,146 @@ export type LayoutTemplate =
   | "TOP_BOTTOM_70_30"
   | "TOP_BOTTOM_80_20"
   | "LEFT_RIGHT_70_30"
-  | "LEFT_RIGHT_50_50";
+  | "LEFT_RIGHT_50_50"
+  | "CUSTOM";
+
+// ─── Nested layout tree ───────────────────────────────────────────────
+// A layout is either a leaf (content slot) or a split that divides its
+// region into two children along a direction with a configurable ratio.
+
+export interface LayoutLeaf {
+  type: "leaf";
+  name: string;
+  label: string;
+}
+
+export interface LayoutSplit {
+  type: "split";
+  direction: "horizontal" | "vertical";
+  /** Percentage (1-99) allocated to the first child */
+  ratio: number;
+  children: [LayoutNode, LayoutNode];
+}
+
+export type LayoutNode = LayoutLeaf | LayoutSplit;
+
+export interface CustomLayoutConfig {
+  tree: LayoutNode;
+}
+
+/**
+ * Flatten a layout tree into absolute-positioned SlotDefinitions by
+ * recursively subdividing a bounding box.
+ */
+export function flattenLayoutTree(
+  node: LayoutNode,
+  bounds: { top: number; left: number; width: number; height: number } = { top: 0, left: 0, width: 100, height: 100 },
+): SlotDefinition[] {
+  if (node.type === "leaf") {
+    return [{
+      name: node.name,
+      label: node.label,
+      top: round2(bounds.top),
+      left: round2(bounds.left),
+      width: round2(bounds.width),
+      height: round2(bounds.height),
+    }];
+  }
+
+  const { direction, ratio, children } = node;
+  let firstBounds: typeof bounds;
+  let secondBounds: typeof bounds;
+
+  if (direction === "vertical") {
+    const firstH = bounds.height * (ratio / 100);
+    firstBounds = { top: bounds.top, left: bounds.left, width: bounds.width, height: firstH };
+    secondBounds = { top: bounds.top + firstH, left: bounds.left, width: bounds.width, height: bounds.height - firstH };
+  } else {
+    const firstW = bounds.width * (ratio / 100);
+    firstBounds = { top: bounds.top, left: bounds.left, width: firstW, height: bounds.height };
+    secondBounds = { top: bounds.top, left: bounds.left + firstW, width: bounds.width - firstW, height: bounds.height };
+  }
+
+  return [
+    ...flattenLayoutTree(children[0], firstBounds),
+    ...flattenLayoutTree(children[1], secondBounds),
+  ];
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/**
+ * Validate a custom layout tree from user input. Returns a sanitised
+ * tree or throws on invalid data.
+ */
+export function validateLayoutTree(input: unknown, depth = 0): LayoutNode {
+  if (depth > 5) throw new Error("Layout muito profundo (máximo 5 níveis)");
+  if (!input || typeof input !== "object") throw new Error("Nó de layout inválido");
+  const obj = input as Record<string, unknown>;
+
+  if (obj.type === "leaf") {
+    const name = typeof obj.name === "string" ? obj.name.trim().slice(0, 32) : "";
+    const label = typeof obj.label === "string" ? obj.label.trim().slice(0, 50) : "";
+    if (!name) throw new Error("Slot sem nome");
+    return { type: "leaf", name, label: label || name };
+  }
+
+  if (obj.type === "split") {
+    const direction = obj.direction === "horizontal" || obj.direction === "vertical" ? obj.direction : "vertical";
+    let ratio = typeof obj.ratio === "number" ? obj.ratio : 50;
+    ratio = Math.max(10, Math.min(90, Math.round(ratio)));
+    if (!Array.isArray(obj.children) || obj.children.length !== 2) {
+      throw new Error("Split precisa de exatamente 2 filhos");
+    }
+    return {
+      type: "split",
+      direction,
+      ratio,
+      children: [
+        validateLayoutTree(obj.children[0], depth + 1),
+        validateLayoutTree(obj.children[1], depth + 1),
+      ],
+    };
+  }
+
+  throw new Error("Tipo de nó desconhecido: " + String(obj.type));
+}
+
+/**
+ * Collect all leaf names from a layout tree.
+ */
+export function getTreeSlotNames(node: LayoutNode): string[] {
+  if (node.type === "leaf") return [node.name];
+  return [...getTreeSlotNames(node.children[0]), ...getTreeSlotNames(node.children[1])];
+}
+
+/**
+ * Convert a preset layout definition into a layout tree for editing.
+ */
+export function presetToTree(template: LayoutTemplate): LayoutNode {
+  if (template === "CUSTOM") {
+    return { type: "leaf", name: "main", label: "Principal" };
+  }
+  const def = LAYOUT_DEFINITIONS[template] ?? LAYOUT_DEFINITIONS.FULLSCREEN;
+  if (def.slots.length === 1) {
+    return { type: "leaf", name: def.slots[0].name, label: def.slots[0].label };
+  }
+  const s0 = def.slots[0];
+  const s1 = def.slots[1];
+  const isVertical = s0.left === s1.left;
+  const ratio = isVertical ? s0.height : s0.width;
+  return {
+    type: "split",
+    direction: isVertical ? "vertical" : "horizontal",
+    ratio,
+    children: [
+      { type: "leaf", name: s0.name, label: s0.label },
+      { type: "leaf", name: s1.name, label: s1.label },
+    ],
+  };
+}
 
 export type Orientation = "LANDSCAPE" | "PORTRAIT";
 
@@ -46,6 +185,14 @@ export const LAYOUT_DEFINITIONS: Record<LayoutTemplate, LayoutDefinition> = {
     template: "FULLSCREEN",
     label: "Tela cheia",
     description: "Uma única área ocupando toda a tela",
+    slots: [
+      { name: "main", label: "Principal", top: 0, left: 0, width: 100, height: 100 },
+    ],
+  },
+  CUSTOM: {
+    template: "CUSTOM",
+    label: "Personalizado",
+    description: "Layout livre com zonas aninhadas e proporções customizáveis",
     slots: [
       { name: "main", label: "Principal", top: 0, left: 0, width: 100, height: 100 },
     ],
@@ -115,35 +262,61 @@ export const ASPECT_RATIOS: { value: AspectRatio; label: string }[] = [
 /**
  * Safely resolve a layout definition, falling back to FULLSCREEN for
  * unknown templates so the player never crashes.
+ *
+ * When `template` is "CUSTOM", pass the stored `customLayout` JSON to
+ * produce the correct slots. Without it the CUSTOM entry defaults to a
+ * single fullscreen slot.
  */
-export function getLayoutDefinition(template: string | null | undefined): LayoutDefinition {
+export function getLayoutDefinition(
+  template: string | null | undefined,
+  customLayout?: unknown,
+): LayoutDefinition {
   if (!template) return LAYOUT_DEFINITIONS.FULLSCREEN;
+
+  if (template === "CUSTOM" && customLayout) {
+    try {
+      const cfg = customLayout as { tree?: unknown };
+      if (cfg.tree) {
+        const tree = validateLayoutTree(cfg.tree);
+        const slots = flattenLayoutTree(tree);
+        if (slots.length > 0) {
+          return {
+            template: "CUSTOM",
+            label: "Personalizado",
+            description: "Layout livre com zonas aninhadas",
+            slots,
+          };
+        }
+      }
+    } catch {
+      // Fall through to default CUSTOM definition
+    }
+  }
+
   const def = LAYOUT_DEFINITIONS[template as LayoutTemplate];
   return def ?? LAYOUT_DEFINITIONS.FULLSCREEN;
 }
 
 /**
  * Returns the list of slot names that exist in a given template.
- * Useful when validating if a Media.slot value is still valid after
- * the user changes the screen's layoutTemplate.
  */
-export function getSlotNames(template: string | null | undefined): string[] {
-  return getLayoutDefinition(template).slots.map((s) => s.name);
+export function getSlotNames(template: string | null | undefined, customLayout?: unknown): string[] {
+  return getLayoutDefinition(template, customLayout).slots.map((s) => s.name);
 }
 
 /**
  * Checks whether a given slot name is valid for a given template.
  */
-export function isValidSlot(template: string | null | undefined, slot: string): boolean {
-  return getSlotNames(template).includes(slot);
+export function isValidSlot(template: string | null | undefined, slot: string, customLayout?: unknown): boolean {
+  return getSlotNames(template, customLayout).includes(slot);
 }
 
 /**
  * Returns the default slot name for a template (always the first slot,
  * which is typically "main").
  */
-export function getDefaultSlot(template: string | null | undefined): string {
-  return getLayoutDefinition(template).slots[0]?.name ?? "main";
+export function getDefaultSlot(template: string | null | undefined, customLayout?: unknown): string {
+  return getLayoutDefinition(template, customLayout).slots[0]?.name ?? "main";
 }
 
 /**

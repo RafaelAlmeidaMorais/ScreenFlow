@@ -28,8 +28,10 @@ export interface PriceTableItem {
   label: string;
   badge?: string;
   badgeColor?: string;
+  logoUrl?: string;
   description?: string;
   value: number;
+  isHidden?: boolean;
 }
 
 export interface PriceTableTheme {
@@ -37,7 +39,7 @@ export interface PriceTableTheme {
   textColor: string;
   valueBackground: string;
   valueColor: string;
-  fontFamily: "digital" | "sans" | "serif";
+  fontFamily: "digital" | "sans" | "serif" | "segment7";
 }
 
 export interface PriceTableConfig {
@@ -55,7 +57,7 @@ const DEFAULT_THEMES: Record<PriceTableTemplate, PriceTableTheme> = {
     textColor: "#FFFFFF",
     valueBackground: "#000000",
     valueColor: "#FFFFFF",
-    fontFamily: "digital",
+    fontFamily: "segment7",
   },
   menu: {
     background: "#0F172A",
@@ -167,14 +169,21 @@ export function validatePriceTableConfig(input: unknown): PriceTableConfig {
     const r = raw as Record<string, unknown>;
     const id = typeof r.id === "string" && r.id.trim() ? r.id.trim().slice(0, 64) : cuidLike("i" + idx);
     const label = typeof r.label === "string" ? r.label.slice(0, 80) : "";
-    if (!label.trim()) throw new Error("Item " + (idx + 1) + " sem nome");
     const badge = typeof r.badge === "string" ? r.badge.slice(0, 8) : undefined;
     const badgeColor = typeof r.badgeColor === "string" && /^#[0-9a-f]{3,8}$/i.test(r.badgeColor)
       ? r.badgeColor
       : undefined;
+    const logoUrl = typeof r.logoUrl === "string" && r.logoUrl.startsWith("https://")
+      ? r.logoUrl.slice(0, 500)
+      : undefined;
     const description = typeof r.description === "string" ? r.description.slice(0, 200) : undefined;
     const value = typeof r.value === "number" && Number.isFinite(r.value) ? r.value : 0;
-    return { id, label, badge, badgeColor, description, value };
+    const isHidden = r.isHidden === true ? true : undefined;
+    // Label is required only when there's no visual identifier (logo or badge)
+    if (!label.trim() && !logoUrl && !badge) {
+      throw new Error("Item " + (idx + 1) + " precisa de um nome, logo ou badge");
+    }
+    return { id, label, badge, badgeColor, logoUrl, description, value, isHidden };
   });
 
   const themeRaw = (obj.theme && typeof obj.theme === "object") ? (obj.theme as Record<string, unknown>) : {};
@@ -185,7 +194,7 @@ export function validatePriceTableConfig(input: unknown): PriceTableConfig {
     valueBackground: validColor(themeRaw.valueBackground, fallback.valueBackground),
     valueColor: validColor(themeRaw.valueColor, fallback.valueColor),
     fontFamily:
-      themeRaw.fontFamily === "digital" || themeRaw.fontFamily === "sans" || themeRaw.fontFamily === "serif"
+      themeRaw.fontFamily === "digital" || themeRaw.fontFamily === "sans" || themeRaw.fontFamily === "serif" || themeRaw.fontFamily === "segment7"
         ? themeRaw.fontFamily
         : fallback.fontFamily,
   };
@@ -208,17 +217,19 @@ function validColor(value: unknown, fallback: string): string {
 /**
  * Format a numeric value with the configured currency and decimal places.
  */
-export function formatPriceValue(value: number, currency: string, decimals: number): string {
+export function formatPriceValue(value: number, _currency: string, decimals: number): string {
   const fixed = value.toFixed(decimals);
-  // Use brazilian decimal separator by default; could be made configurable.
   const withComma = fixed.replace(".", ",");
-  return currency + " " + withComma;
+  return withComma;
 }
 
+const DSEG7_WOFF2_BASE64 = "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";
+
 const FONT_FAMILIES: Record<PriceTableTheme["fontFamily"], string> = {
-  digital: '"Courier New", "Lucida Console", monospace',
-  sans: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  serif: 'Georgia, "Times New Roman", serif',
+  digital: "'Courier New', 'Lucida Console', monospace",
+  sans: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+  serif: "Georgia, 'Times New Roman', serif",
+  segment7: "'DSEG7 Classic', 'Courier New', monospace",
 };
 
 /**
@@ -232,19 +243,27 @@ const FONT_FAMILIES: Record<PriceTableTheme["fontFamily"], string> = {
  */
 export function renderPriceTableHTML(config: PriceTableConfig): string {
   const theme = config.theme;
-  const font = FONT_FAMILIES[theme.fontFamily] || FONT_FAMILIES.sans;
-  const itemRows = config.items
-    .map((item) => renderPriceRow(item, theme, config.currency, config.decimals, font))
+  const isSegment7 = theme.fontFamily === "segment7";
+  const containerFont = isSegment7 ? FONT_FAMILIES.digital : (FONT_FAMILIES[theme.fontFamily] || FONT_FAMILIES.sans);
+  const font = containerFont;
+  const visibleItems = config.items.filter((item) => !item.isHidden);
+  const itemRows = visibleItems
+    .map((item) => renderPriceRow(item, theme, config.currency, config.decimals, font, isSegment7))
     .join("");
 
+  const fontFaceCSS = isSegment7
+    ? '<style>@font-face{font-family:"DSEG7 Classic";src:url(data:font/woff2;base64,' + DSEG7_WOFF2_BASE64 + ') format("woff2");font-weight:bold;font-style:normal;font-display:block}</style>'
+    : "";
+
   const titleHTML = config.title
-    ? `<div style="padding:1.2vmin 1.6vmin 0.6vmin;color:${theme.textColor};font-size:2vmin;font-weight:600;font-family:${font};text-transform:uppercase;letter-spacing:0.06em;opacity:0.85">${escapeHtml(config.title)}</div>`
+    ? `<div style="flex:0 0 auto;padding:1.5% 2% 0.5%;color:${theme.textColor};font-size:5cqh;font-weight:600;font-family:${containerFont};text-transform:uppercase;letter-spacing:0.06em;opacity:0.85;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(config.title)}</div>`
     : "";
 
   return (
-    `<div style="position:relative;width:100%;height:100%;background:${theme.background};color:${theme.textColor};font-family:${font};display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box">` +
+    fontFaceCSS +
+    `<div style="container-type:size;position:relative;width:100%;height:100%;background:${theme.background};color:${theme.textColor};font-family:${containerFont};display:flex;flex-direction:column;overflow:hidden;box-sizing:border-box">` +
     titleHTML +
-    `<div style="flex:1;display:flex;flex-direction:column;justify-content:space-around;padding:0.8vmin 1.2vmin 1.2vmin;gap:0.6vmin">` +
+    `<div style="flex:1 1 0;min-height:0;display:flex;flex-direction:column;padding:1% 1.5% 1.5%;gap:1%">` +
     itemRows +
     `</div></div>`
   );
@@ -256,21 +275,40 @@ function renderPriceRow(
   currency: string,
   decimals: number,
   font: string,
+  isSegment7: boolean,
 ): string {
-  const badgeHTML = item.badge
-    ? `<div style="flex:0 0 auto;width:5.2vmin;height:5.2vmin;border-radius:0.8vmin;background:${item.badgeColor || "#444"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:3vmin;font-family:${font}">${escapeHtml(item.badge)}</div>`
+  const hasLogo = !!item.logoUrl;
+  const hasBadge = !!item.badge;
+  const hasLabel = !!item.label && item.label.trim().length > 0;
+
+  let badgeHTML = "";
+  if (hasLogo) {
+    // flex:0 0 auto + max-width keeps the logo container tight to the image's natural size,
+    // so the value can sit right next to it with no empty gap.
+    const maxLogoWidth = hasLabel ? "32%" : "55%";
+    badgeHTML = `<div style="flex:0 0 auto;max-width:${maxLogoWidth};height:100%;display:flex;align-items:center;min-width:0;overflow:hidden"><img src="${escapeHtml(item.logoUrl!)}" style="height:100%;width:auto;max-width:100%;max-height:100%;object-fit:contain;display:block" /></div>`;
+  } else if (hasBadge) {
+    badgeHTML = `<div style="flex:0 0 auto;aspect-ratio:1;height:100%;border-radius:8cqh;background:${item.badgeColor || "#444"};color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:55cqh;font-family:${font}">${escapeHtml(item.badge!)}</div>`;
+  }
+
+  // Render label area only when there's actual label text. When absent, we omit
+  // the element entirely so the value sits immediately next to the logo.
+  const labelHTML = hasLabel
+    ? `<div style="flex:1 1 0;min-width:0;padding:0 2%;display:flex;flex-direction:column;justify-content:center">` +
+      `<div style="font-size:38cqh;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.label)}</div>` +
+      (item.description
+        ? `<div style="font-size:22cqh;opacity:0.65;line-height:1.2;margin-top:2cqh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.description)}</div>`
+        : "") +
+      `</div>`
     : "";
 
-  const labelHTML = `<div style="flex:1;min-width:0;padding:0 1.2vmin">` +
-    `<div style="font-size:2.4vmin;font-weight:700;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.label)}</div>` +
-    (item.description
-      ? `<div style="font-size:1.5vmin;opacity:0.65;line-height:1.2;margin-top:0.2vmin;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(item.description)}</div>`
-      : "") +
-    `</div>`;
+  const valueFont = isSegment7 ? "'DSEG7 Classic', monospace" : font;
+  const valueHTML = `<div style="flex:0 0 auto;height:100%;background:${theme.valueBackground};color:${theme.valueColor};padding:0 3%;border-radius:6cqh;font-weight:900;font-size:60cqh;font-family:${valueFont};font-variant-numeric:tabular-nums;text-align:right;display:flex;align-items:center;justify-content:flex-end;line-height:1">${escapeHtml(formatPriceValue(item.value, currency, decimals))}</div>`;
 
-  const valueHTML = `<div style="flex:0 0 auto;background:${theme.valueBackground};color:${theme.valueColor};padding:0.6vmin 1.4vmin;border-radius:0.6vmin;font-weight:900;font-size:3.6vmin;font-family:${font};font-variant-numeric:tabular-nums;min-width:14vmin;text-align:right">${escapeHtml(formatPriceValue(item.value, currency, decimals))}</div>`;
-
-  return `<div style="display:flex;align-items:center;justify-content:space-between;gap:0.8vmin">${badgeHTML}${labelHTML}${valueHTML}</div>`;
+  // container-type:size on the row lets the cqh units inside scale to the row's height.
+  // justify-content:center keeps the [logo][value] pair packed tight together in the
+  // middle of the row, regardless of how much horizontal space the widget zone has.
+  return `<div style="container-type:size;display:flex;align-items:stretch;justify-content:center;flex:1 1 0;min-height:0;gap:1.5%">${badgeHTML}${labelHTML}${valueHTML}</div>`;
 }
 
 function escapeHtml(text: string): string {

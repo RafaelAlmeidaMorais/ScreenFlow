@@ -52,6 +52,7 @@ model Screen {
   orientation        String    @default("LANDSCAPE")
   aspectRatio        String    @default("AUTO")
   layoutTemplate     String    @default("FULLSCREEN")
+  customLayout       Json?
   createdAt          DateTime  @default(now())
   company            Company   @relation(fields: [companyId], references: [id])
   medias             Media[]

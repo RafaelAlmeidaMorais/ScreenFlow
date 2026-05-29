@@ -16,11 +16,15 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { LayoutPreview } from "@/components/dashboard/layout-preview";
+import { LayoutTreeEditor } from "@/components/dashboard/layout-tree-editor";
 import {
   ASPECT_RATIOS,
   LAYOUT_DEFINITIONS,
   LAYOUT_TEMPLATES,
   ORIENTATIONS,
+  type LayoutNode,
+  type CustomLayoutConfig,
+  presetToTree,
 } from "@/lib/layouts";
 
 interface ScreenData {
@@ -35,6 +39,7 @@ interface ScreenData {
   orientation: string;
   aspectRatio: string;
   layoutTemplate: string;
+  customLayout?: CustomLayoutConfig | null;
 }
 
 export function EditScreenDialog({ screen }: { screen: ScreenData }) {
@@ -48,6 +53,12 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
   const [layoutTemplate, setLayoutTemplate] = useState(
     screen.layoutTemplate || "FULLSCREEN",
   );
+  const [customTree, setCustomTree] = useState<LayoutNode>(() => {
+    if (screen.layoutTemplate === "CUSTOM" && screen.customLayout?.tree) {
+      return screen.customLayout.tree as LayoutNode;
+    }
+    return presetToTree(screen.layoutTemplate as Parameters<typeof presetToTree>[0] || "FULLSCREEN");
+  });
   const [copied, setCopied] = useState(false);
   const router = useRouter();
 
@@ -57,6 +68,9 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
     formData.set("orientation", orientation);
     formData.set("aspectRatio", aspectRatio);
     formData.set("layoutTemplate", layoutTemplate);
+    if (layoutTemplate === "CUSTOM") {
+      formData.set("customLayout", JSON.stringify({ tree: customTree }));
+    }
     setLoading(true);
     try {
       await updateScreen(screen.id, formData);
@@ -187,7 +201,13 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
               <select
                 id="layoutTemplate"
                 value={layoutTemplate}
-                onChange={(e) => setLayoutTemplate(e.target.value)}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setLayoutTemplate(val);
+                  if (val !== "CUSTOM") {
+                    setCustomTree(presetToTree(val as Parameters<typeof presetToTree>[0]));
+                  }
+                }}
                 className="w-full rounded-md border border-border/50 bg-background/50 px-3 py-2 text-sm cursor-pointer"
               >
                 {LAYOUT_TEMPLATES.map((t) => (
@@ -199,9 +219,19 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
               </p>
             </div>
 
-            <div className="pt-1">
-              <LayoutPreview template={layoutTemplate} orientation={orientation as "LANDSCAPE" | "PORTRAIT"} />
-            </div>
+            {layoutTemplate === "CUSTOM" ? (
+              <div className="pt-1">
+                <LayoutTreeEditor
+                  tree={customTree}
+                  onChange={setCustomTree}
+                  orientation={orientation as "LANDSCAPE" | "PORTRAIT"}
+                />
+              </div>
+            ) : (
+              <div className="pt-1">
+                <LayoutPreview template={layoutTemplate} orientation={orientation as "LANDSCAPE" | "PORTRAIT"} />
+              </div>
+            )}
           </div>
 
           <div className="flex items-center justify-between rounded-xl border border-border/50 bg-background/50 px-4 py-3">
