@@ -4,7 +4,12 @@ import { auth } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-/** Unpair / delete a device (authed). */
+/**
+ * Unpair a device (authed). We keep the row and just clear the pairing so
+ * the device's next heartbeat detects the unpair and returns it to the
+ * pairing page. The row gets a fresh pairing code and is excluded from the
+ * "paired devices" listing (which filters by pairedAt NOT NULL).
+ */
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -25,7 +30,19 @@ export async function DELETE(
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  await prisma.deviceToken.delete({ where: { id } });
+  const { generateUniqueCode, CODE_TTL_MS } = await import("@/lib/device-codes");
+  const code = await generateUniqueCode();
+  await prisma.deviceToken.update({
+    where: { id },
+    data: {
+      screenId: null,
+      companyId: null,
+      pairedAt: null,
+      name: null,
+      code,
+      codeExpiresAt: new Date(Date.now() + CODE_TTL_MS),
+    },
+  });
   return NextResponse.json({ ok: true });
 }
 

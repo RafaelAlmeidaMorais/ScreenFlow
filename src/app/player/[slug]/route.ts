@@ -396,6 +396,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
           try{ console.log("hb"); }catch(e){}
           try{
             var data = JSON.parse(xhr.responseText);
+            // Restart has priority over unpair — an admin-triggered reload
+            // should always win, even if a stale device cookie also matched.
+            if(data && data.shouldRefresh){ window.location.reload(); return; }
             if(data && data.shouldUnpair){
               // Device was unpaired from the dashboard — flush playback and
               // go back to the pairing page, which will show a fresh code.
@@ -403,7 +406,6 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
               window.location.replace("/player");
               return;
             }
-            if(data && data.shouldRefresh) window.location.reload();
           }catch(e){}
         }
       };

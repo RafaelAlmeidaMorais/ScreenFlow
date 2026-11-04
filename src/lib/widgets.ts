@@ -311,12 +311,16 @@ function renderPriceRow(
     : "";
 
   const valueFont = isSegment7 ? "'DSEG7 Classic', monospace" : font;
-  // min-width uses ch units (= width of "0" at the current font-size). With
-  // font-variant-numeric:tabular-nums every digit has that same advance, so
-  // N chars ≈ N ch. We add +1ch of headroom to cover the comma/decimal point
-  // and font-specific metrics so the longest value never overflows.
-  const minWidthRule = maxValueChars > 0 ? `min-width:${maxValueChars + 1}ch;` : "";
-  const valueHTML = `<div style="flex:0 0 auto;${minWidthRule}height:100%;background:${theme.valueBackground};color:${theme.valueColor};padding:0 3%;border-radius:6cqh;font-weight:900;font-size:60cqh;font-family:${valueFont};font-variant-numeric:tabular-nums;text-align:right;display:flex;align-items:center;justify-content:flex-end;line-height:1">${escapeHtml(formatPriceValue(item.value, currency, decimals))}</div>`;
+  // Fix the width based on the widest value (in ch units — digit width under
+  // tabular-nums). Width wins over flex-basis:auto so every box is identical,
+  // and text-align:right keeps shorter values pinned to the right edge.
+  // +1ch of headroom covers the comma and font-specific side-bearings.
+  // segment7 (DSEG7) digits are chunkier — use a bigger per-char allowance.
+  const perCharAllowance = isSegment7 ? 1.1 : 1;
+  const widthRule = maxValueChars > 0
+    ? `width:${(maxValueChars + 1) * perCharAllowance}ch;`
+    : "";
+  const valueHTML = `<div style="flex:0 0 auto;${widthRule}height:100%;background:${theme.valueBackground};color:${theme.valueColor};padding:0 3%;border-radius:6cqh;font-weight:900;font-size:60cqh;font-family:${valueFont};font-variant-numeric:tabular-nums;text-align:right;display:flex;align-items:center;justify-content:flex-end;line-height:1;box-sizing:content-box">${escapeHtml(formatPriceValue(item.value, currency, decimals))}</div>`;
 
   // container-type:size on the row lets the cqh units inside scale to the row's height.
   // justify-content:center keeps the [logo][value] pair packed tight together in the

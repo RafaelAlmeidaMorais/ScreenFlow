@@ -38,9 +38,11 @@ export async function POST(
     data: { lastSeenAt: new Date() },
   });
 
-  // If this request came from a paired device (has device_id cookie),
-  // signal the client to leave the player when the pairing no longer matches.
-  // Devices that never paired (no cookie) are unaffected and keep playing.
+  // If this request came from a paired device (has device_id cookie) and the
+  // device still exists in the DB, signal the client to leave the player when
+  // the pairing no longer matches this screen. A missing cookie or missing DB
+  // row (stale cookie from an old test, etc.) is treated as "direct URL mode"
+  // — the TV box keeps playing and remote Restart still works normally.
   let shouldUnpair = false;
   const deviceId = req.cookies.get("device_id")?.value;
   if (deviceId) {
@@ -48,9 +50,11 @@ export async function POST(
       where: { id: deviceId },
       select: { screenId: true },
     });
-    if (!device || device.screenId !== screen.id) {
+    if (device && device.screenId !== screen.id) {
+      // Device row exists but points elsewhere (null = admin unpaired it, or
+      // another screen id = re-paired). Kick it back to the pairing page.
       shouldUnpair = true;
-    } else {
+    } else if (device) {
       await prisma.deviceToken
         .update({ where: { id: deviceId }, data: { lastSeenAt: new Date() } })
         .catch(() => {});
