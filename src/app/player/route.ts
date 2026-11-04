@@ -140,6 +140,9 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;color:#fff}
   }
 
   setInterval(poll, pollMs);
+
+  // Keep APK watchdog alive (DEBUG_SCRIPT forwards console.log to native).
+  setInterval(function(){ try{ console.log("tick"); }catch(e){} }, 20000);
 })();
 </script>
 </body>

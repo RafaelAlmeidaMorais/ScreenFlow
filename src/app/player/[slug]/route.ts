@@ -392,6 +392,8 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
       xhr.setRequestHeader("Content-Type", "application/json");
       xhr.onreadystatechange = function(){
         if(xhr.readyState === 4 && xhr.status === 200){
+          // Keep APK watchdog alive (DEBUG_SCRIPT forwards console.log to native).
+          try{ console.log("hb"); }catch(e){}
           try{
             var data = JSON.parse(xhr.responseText);
             if(data && data.shouldUnpair){
@@ -408,6 +410,12 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
       xhr.send(JSON.stringify({ bootedAt: bootedAt }));
     }catch(e){}
   }
+
+  // Dedicated watchdog ping — the APK kills the WebView if nothing is heard
+  // from it for 45s (checks every 30s). Even if heartbeat/polling break, this
+  // keeps the page considered "alive" so the user can see the error instead
+  // of a silent reload loop.
+  setInterval(function(){ try{ console.log("tick"); }catch(e){} }, 20000);
 
   function setupAutoRefresh(){
     if(config.autoRefreshMinutes > 0){
