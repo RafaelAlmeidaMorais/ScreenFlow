@@ -38,6 +38,25 @@ export async function POST(
     data: { lastSeenAt: new Date() },
   });
 
+  // If this request came from a paired device (has device_id cookie),
+  // signal the client to leave the player when the pairing no longer matches.
+  // Devices that never paired (no cookie) are unaffected and keep playing.
+  let shouldUnpair = false;
+  const deviceId = req.cookies.get("device_id")?.value;
+  if (deviceId) {
+    const device = await prisma.deviceToken.findUnique({
+      where: { id: deviceId },
+      select: { screenId: true },
+    });
+    if (!device || device.screenId !== screen.id) {
+      shouldUnpair = true;
+    } else {
+      await prisma.deviceToken
+        .update({ where: { id: deviceId }, data: { lastSeenAt: new Date() } })
+        .catch(() => {});
+    }
+  }
+
   // Check if admin requested a refresh after this player instance booted
   const shouldRefresh =
     screen.refreshRequestedAt &&
@@ -51,6 +70,7 @@ export async function POST(
 
   return NextResponse.json({
     shouldRefresh: !!shouldRefresh,
+    shouldUnpair,
     intervalSeconds: screen.intervalSeconds,
     autoRefreshMinutes: screen.autoRefreshMinutes,
     isActive: screen.isActive,

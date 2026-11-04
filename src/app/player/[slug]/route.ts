@@ -226,6 +226,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
       };
       zoneStates.push(state);
       updateInfoForZone(state);
+      recordPlaybackStart(state);
       startCurrentForZone(state);
     }
   }
@@ -278,13 +279,16 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
 
   function goNextForZone(state){
     clearTimersForZone(state);
+    recordPlaybackEnd(state);
     if(state.medias.length <= 1){
+      recordPlaybackStart(state);
       restartCurrentForZone(state);
     } else {
       state.currentIndex = (state.currentIndex + 1) % state.medias.length;
       showSlideForZone(state, state.currentIndex);
       updateInfoForZone(state);
       updateProgressForZone(state, 0);
+      recordPlaybackStart(state);
       startCurrentForZone(state);
     }
   }
@@ -390,6 +394,13 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
         if(xhr.readyState === 4 && xhr.status === 200){
           try{
             var data = JSON.parse(xhr.responseText);
+            if(data && data.shouldUnpair){
+              // Device was unpaired from the dashboard — flush playback and
+              // go back to the pairing page, which will show a fresh code.
+              flushPlayback(true);
+              window.location.replace("/player");
+              return;
+            }
             if(data && data.shouldRefresh) window.location.reload();
           }catch(e){}
         }
@@ -403,6 +414,65 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
       setTimeout(function(){ window.location.reload(); }, config.autoRefreshMinutes * 60 * 1000);
     }
   }
+
+  // Playback tracking — record when each media is displayed, flush in batches
+  var playbackQueue = [];
+  var playbackStart = {}; // zoneIndex -> { mediaId, startMs }
+
+  function recordPlaybackStart(state){
+    var m = state.medias[state.currentIndex];
+    if(!m || !m.id) return;
+    playbackStart[state.index] = { mediaId: m.id, startMs: new Date().getTime(), playedAt: new Date().toISOString() };
+  }
+
+  function recordPlaybackEnd(state){
+    var entry = playbackStart[state.index];
+    if(!entry) return;
+    var durationMs = new Date().getTime() - entry.startMs;
+    // Ignore absurdly short plays (< 500ms, likely glitch) and keep a cap
+    if(durationMs >= 500 && durationMs < 24*3600*1000){
+      playbackQueue.push({ mediaId: entry.mediaId, playedAt: entry.playedAt, durationMs: durationMs });
+    }
+    playbackStart[state.index] = null;
+    // Flush when buffer gets big
+    if(playbackQueue.length >= 20) flushPlayback();
+  }
+
+  function flushPlayback(useBeacon){
+    if(playbackQueue.length === 0) return;
+    var payload = JSON.stringify({ events: playbackQueue });
+    playbackQueue = [];
+    var url = "/api/player/" + config.token + "/playback";
+    if(useBeacon && navigator.sendBeacon){
+      try{
+        var blob = new Blob([payload], { type: "application/json" });
+        navigator.sendBeacon(url, blob);
+        return;
+      }catch(e){}
+    }
+    try{
+      var xhr = new XMLHttpRequest();
+      xhr.open("POST", url, true);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      xhr.send(payload);
+    }catch(e){}
+  }
+
+  // Flush playback periodically and on unload
+  setInterval(function(){ flushPlayback(false); }, 20000);
+  window.addEventListener('pagehide', function(){
+    // Close any active plays
+    for(var k in playbackStart){
+      if(playbackStart[k]){
+        var e = playbackStart[k];
+        var d = new Date().getTime() - e.startMs;
+        if(d >= 500 && d < 24*3600*1000){
+          playbackQueue.push({ mediaId: e.mediaId, playedAt: e.playedAt, durationMs: d });
+        }
+      }
+    }
+    flushPlayback(true);
+  });
 
   // Widget polling — refresh widget content every 30s without reloading
   var lastWidgetEtag = '';

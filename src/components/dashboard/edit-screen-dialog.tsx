@@ -59,7 +59,7 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
     }
     return presetToTree(screen.layoutTemplate as Parameters<typeof presetToTree>[0] || "FULLSCREEN");
   });
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"direct" | "pair" | null>(null);
   const router = useRouter();
 
   async function handleSubmit(formData: FormData) {
@@ -98,11 +98,14 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
     }
   }
 
-  function copyPlayerUrl() {
-    const url = `${window.location.origin}/player/${screen.slug}`;
+  function copyPlayerUrl(kind: "direct" | "pair") {
+    const url =
+      kind === "direct"
+        ? `${window.location.origin}/player/${screen.slug}`
+        : `${window.location.origin}/player`;
     navigator.clipboard.writeText(url);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(kind);
+    setTimeout(() => setCopied(null), 2000);
   }
 
   return (
@@ -250,36 +253,83 @@ export function EditScreenDialog({ screen }: { screen: ScreenData }) {
             <Switch checked={showProgressBar} onCheckedChange={setShowProgressBar} />
           </div>
 
-          {/* Player URL */}
-          <div className="space-y-2">
-            <Label>URL do Player</Label>
-            <div className="flex items-center gap-2">
-              <code className="flex-1 text-xs bg-background/50 border border-border/50 rounded-lg px-3 py-2.5 truncate text-muted-foreground">
-                /player/{screen.slug}
-              </code>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={copyPlayerUrl}
-                className="shrink-0 text-xs cursor-pointer hover:text-orange hover:bg-orange/10"
-              >
-                {copied ? (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
-                    </svg>
-                    Copiado
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
-                    </svg>
-                    Copiar
-                  </>
-                )}
-              </Button>
+          {/* Player URLs — duas opções */}
+          <div className="space-y-3 rounded-xl border border-border/50 bg-background/50 px-4 py-3">
+            <div>
+              <p className="text-sm font-medium">URL do Player</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Duas formas de conectar um TV box. Use o que preferir.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Direto (mais rápido)</Label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-background border border-border/50 rounded-lg px-3 py-2.5 truncate text-muted-foreground">
+                  /player/{screen.slug}
+                </code>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => copyPlayerUrl("direct")}
+                  className="shrink-0 text-xs cursor-pointer hover:text-orange hover:bg-orange/10"
+                >
+                  {copied === "direct" ? (
+                    <>
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                      Copiado
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                      </svg>
+                      Copiar
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground/70">
+                Cole no APK e a tela toca imediatamente.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Com pareamento por código</Label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 text-xs bg-background border border-border/50 rounded-lg px-3 py-2.5 truncate text-muted-foreground">
+                  /player
+                </code>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => copyPlayerUrl("pair")}
+                  className="shrink-0 text-xs cursor-pointer hover:text-orange hover:bg-orange/10"
+                >
+                  {copied === "pair" ? (
+                    <>
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                      </svg>
+                      Copiado
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75" />
+                      </svg>
+                      Copiar
+                    </>
+                  )}
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground/70">
+                TV box mostra um código — você pareia pelo painel em <strong>Dispositivos</strong>.
+              </p>
             </div>
           </div>
 

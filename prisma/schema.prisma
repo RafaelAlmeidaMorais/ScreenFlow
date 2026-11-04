@@ -8,14 +8,16 @@ datasource db {
 }
 
 model Company {
-  id        String     @id @default(cuid())
-  name      String
-  slug      String     @unique
-  createdAt DateTime   @default(now())
-  users     User[]
-  screens   Screen[]
-  medias    Media[]
-  auditLogs AuditLog[]
+  id             String          @id @default(cuid())
+  name           String
+  slug           String          @unique
+  createdAt      DateTime        @default(now())
+  users          User[]
+  screens        Screen[]
+  medias         Media[]
+  auditLogs      AuditLog[]
+  playbackEvents PlaybackEvent[]
+  deviceTokens   DeviceToken[]
 
   @@map("companies")
 }
@@ -57,6 +59,8 @@ model Screen {
   company            Company   @relation(fields: [companyId], references: [id])
   medias             Media[]
   widgets            ScreenWidget[]
+  playbackEvents     PlaybackEvent[]
+  deviceTokens       DeviceToken[]
 
   @@map("screens")
 }
@@ -97,6 +101,7 @@ model Media {
   screen          Screen    @relation(fields: [screenId], references: [id])
   company         Company   @relation(fields: [companyId], references: [id])
   createdBy       User      @relation("CreatedByUser", fields: [createdById], references: [id])
+  playbackEvents  PlaybackEvent[]
 
   @@map("medias")
 }
@@ -110,6 +115,42 @@ model PasswordResetToken {
 
   @@index([email])
   @@map("password_reset_tokens")
+}
+
+model DeviceToken {
+  id            String    @id @default(cuid())
+  code          String?   @unique
+  codeExpiresAt DateTime?
+  screenId      String?
+  companyId     String?
+  name          String?
+  userAgent     String?
+  lastSeenAt    DateTime?
+  pairedAt      DateTime?
+  createdAt     DateTime  @default(now())
+  screen        Screen?   @relation(fields: [screenId], references: [id], onDelete: SetNull)
+  company       Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([screenId])
+  @@index([companyId])
+  @@map("device_tokens")
+}
+
+model PlaybackEvent {
+  id         String   @id @default(cuid())
+  mediaId    String
+  screenId   String
+  companyId  String
+  playedAt   DateTime @default(now())
+  durationMs Int?
+  media      Media    @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  screen     Screen   @relation(fields: [screenId], references: [id], onDelete: Cascade)
+  company    Company  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+
+  @@index([companyId, playedAt])
+  @@index([mediaId, playedAt])
+  @@index([screenId, playedAt])
+  @@map("playback_events")
 }
 
 model AuditLog {
