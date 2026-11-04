@@ -247,8 +247,15 @@ export function renderPriceTableHTML(config: PriceTableConfig): string {
   const containerFont = isSegment7 ? FONT_FAMILIES.digital : (FONT_FAMILIES[theme.fontFamily] || FONT_FAMILIES.sans);
   const font = containerFont;
   const visibleItems = config.items.filter((item) => !item.isHidden);
+  // Width of the widest formatted value across all visible rows. All value
+  // boxes use this as min-width so a shorter price doesn't get a narrower box
+  // than a longer one — keeps the column visually aligned.
+  const maxValueChars = visibleItems.reduce((acc, item) => {
+    const len = formatPriceValue(item.value, config.currency, config.decimals).length;
+    return Math.max(acc, len);
+  }, 0);
   const itemRows = visibleItems
-    .map((item) => renderPriceRow(item, theme, config.currency, config.decimals, font, isSegment7))
+    .map((item) => renderPriceRow(item, theme, config.currency, config.decimals, font, isSegment7, maxValueChars))
     .join("");
 
   const fontFaceCSS = isSegment7
@@ -276,6 +283,7 @@ function renderPriceRow(
   decimals: number,
   font: string,
   isSegment7: boolean,
+  maxValueChars: number,
 ): string {
   const hasLogo = !!item.logoUrl;
   const hasBadge = !!item.badge;
@@ -303,7 +311,12 @@ function renderPriceRow(
     : "";
 
   const valueFont = isSegment7 ? "'DSEG7 Classic', monospace" : font;
-  const valueHTML = `<div style="flex:0 0 auto;height:100%;background:${theme.valueBackground};color:${theme.valueColor};padding:0 3%;border-radius:6cqh;font-weight:900;font-size:60cqh;font-family:${valueFont};font-variant-numeric:tabular-nums;text-align:right;display:flex;align-items:center;justify-content:flex-end;line-height:1">${escapeHtml(formatPriceValue(item.value, currency, decimals))}</div>`;
+  // min-width uses ch units (= width of "0" at the current font-size). With
+  // font-variant-numeric:tabular-nums every digit has that same advance, so
+  // N chars ≈ N ch. We add +1ch of headroom to cover the comma/decimal point
+  // and font-specific metrics so the longest value never overflows.
+  const minWidthRule = maxValueChars > 0 ? `min-width:${maxValueChars + 1}ch;` : "";
+  const valueHTML = `<div style="flex:0 0 auto;${minWidthRule}height:100%;background:${theme.valueBackground};color:${theme.valueColor};padding:0 3%;border-radius:6cqh;font-weight:900;font-size:60cqh;font-family:${valueFont};font-variant-numeric:tabular-nums;text-align:right;display:flex;align-items:center;justify-content:flex-end;line-height:1">${escapeHtml(formatPriceValue(item.value, currency, decimals))}</div>`;
 
   // container-type:size on the row lets the cqh units inside scale to the row's height.
   // justify-content:center keeps the [logo][value] pair packed tight together in the
