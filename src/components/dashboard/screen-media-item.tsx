@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { MediaFileInput } from "@/components/dashboard/media-file-input";
+import { LocalDateTime, MediaScheduleFields } from "@/components/dashboard/media-schedule-fields";
 import {
   Select,
   SelectContent,
@@ -45,6 +46,7 @@ interface MediaData {
   isEnabled: boolean;
   orderIndex: number;
   isExpired: boolean;
+  isScheduled: boolean;
 }
 
 interface OtherScreen {
@@ -68,11 +70,6 @@ export function ScreenMediaItem({
   const [isEnabled, setIsEnabled] = useState(media.isEnabled);
   const durationRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-
-  function formatDate(iso: string | null) {
-    if (!iso) return "";
-    return iso.slice(0, 10);
-  }
 
   async function handleUpdate(formData: FormData) {
     formData.set("type", type);
@@ -151,12 +148,20 @@ export function ScreenMediaItem({
                 className={
                   media.isExpired
                     ? "bg-red-500/10 text-red-400 border border-red-500/20 hover:bg-red-500/10"
-                    : media.isEnabled
-                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10"
-                    : "bg-muted text-muted-foreground border border-border/50 hover:bg-muted"
+                    : !media.isEnabled
+                    ? "bg-muted text-muted-foreground border border-border/50 hover:bg-muted"
+                    : media.isScheduled
+                    ? "bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/10"
+                    : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/10"
                 }
               >
-                {media.isExpired ? "Expirada" : media.isEnabled ? "Ativa" : "Desabilitada"}
+                {media.isExpired
+                  ? "Expirada"
+                  : !media.isEnabled
+                  ? "Desabilitada"
+                  : media.isScheduled
+                  ? "Agendada"
+                  : "Ativa"}
               </Badge>
               <Badge variant="outline" className="text-xs">
                 {media.type === "VIDEO" ? "Vídeo" : "Imagem"}
@@ -166,8 +171,13 @@ export function ScreenMediaItem({
               <span className="text-xs text-muted-foreground/60">{media.durationSeconds}s</span>
               {media.startDate && (
                 <span className="text-xs text-muted-foreground/60">
-                  {formatDate(media.startDate)}
-                  {media.endDate ? ` → ${formatDate(media.endDate)}` : ""}
+                  <LocalDateTime iso={media.startDate} />
+                  {media.endDate && (
+                    <>
+                      {" → "}
+                      <LocalDateTime iso={media.endDate} />
+                    </>
+                  )}
                 </span>
               )}
             </div>
@@ -219,16 +229,7 @@ export function ScreenMediaItem({
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="startDate">Data de início</Label>
-                    <Input id="startDate" name="startDate" type="date" defaultValue={formatDate(media.startDate)} className="bg-background/50 border-border/50" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="endDate">Data de fim</Label>
-                    <Input id="endDate" name="endDate" type="date" defaultValue={formatDate(media.endDate)} className="bg-background/50 border-border/50" />
-                  </div>
-                </div>
+                <MediaScheduleFields defaultStart={media.startDate} defaultEnd={media.endDate} />
 
                 <div className="flex items-center justify-between rounded-xl border border-border/50 bg-background/50 px-4 py-3">
                   <div>

@@ -67,13 +67,30 @@ export async function POST(
     bootedAt &&
     screen.refreshRequestedAt > bootedAt;
 
+  // A media's start or end passed since the page was rendered: reload so the
+  // playlist picks it up (or drops it). renderedAt is the server's own clock
+  // echoed back, so a TV box with a wrong clock doesn't matter here.
+  let scheduleChanged = false;
+  const renderedAt = body.renderedAt ? new Date(body.renderedAt) : null;
+  if (renderedAt && !isNaN(renderedAt.getTime())) {
+    const sinceRender = { gt: renderedAt, lte: new Date() };
+    const crossed = await prisma.media.count({
+      where: {
+        screenId: screen.id,
+        isEnabled: true,
+        OR: [{ startDate: sinceRender }, { endDate: sinceRender }],
+      },
+    });
+    scheduleChanged = crossed > 0;
+  }
+
   // Check if there are updated medias (content version)
   const mediaCount = await prisma.media.count({
     where: { screenId: screen.id, isEnabled: true },
   });
 
   return NextResponse.json({
-    shouldRefresh: !!shouldRefresh,
+    shouldRefresh: !!shouldRefresh || scheduleChanged,
     shouldUnpair,
     intervalSeconds: screen.intervalSeconds,
     autoRefreshMinutes: screen.autoRefreshMinutes,

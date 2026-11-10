@@ -244,6 +244,7 @@ export default async function ScreenDetailPage({ params }: Props) {
                       isEnabled: media.isEnabled,
                       orderIndex: index,
                       isExpired: !!isExpired,
+                      isScheduled: media.startDate > now,
                     };
                   })}
                   screenId={screen.id}

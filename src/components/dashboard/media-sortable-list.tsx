@@ -16,6 +16,7 @@ interface MediaData {
   isEnabled: boolean;
   orderIndex: number;
   isExpired: boolean;
+  isScheduled: boolean;
 }
 
 interface OtherScreen {
@@ -32,6 +33,13 @@ interface Props {
 
 export function MediaSortableList({ medias: initialMedias, screenId, otherScreens, slot }: Props) {
   const [medias, setMedias] = useState(initialMedias);
+  // The local copy exists for optimistic drag-and-drop. Whenever the server
+  // sends a fresh list (after add/edit/delete + router.refresh), adopt it.
+  const [syncedWith, setSyncedWith] = useState(initialMedias);
+  if (syncedWith !== initialMedias) {
+    setSyncedWith(initialMedias);
+    setMedias(initialMedias);
+  }
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const dragIndex = useRef<number | null>(null);

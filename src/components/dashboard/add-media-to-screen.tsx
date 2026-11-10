@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { MediaFileInput } from "@/components/dashboard/media-file-input";
+import { MediaScheduleFields } from "@/components/dashboard/media-schedule-fields";
 import {
   Select,
   SelectContent,
@@ -159,27 +160,7 @@ export function AddMediaToScreen({
               />
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="startDate">Data de início</Label>
-              <Input
-                id="startDate"
-                name="startDate"
-                type="date"
-                defaultValue={new Date().toISOString().slice(0, 10)}
-                className="bg-background/50 border-border/50"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="endDate">Data de fim (opcional)</Label>
-              <Input
-                id="endDate"
-                name="endDate"
-                type="date"
-                className="bg-background/50 border-border/50"
-              />
-            </div>
-          </div>
+          <MediaScheduleFields />
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={() => setOpen(false)} className="cursor-pointer">
               Cancelar

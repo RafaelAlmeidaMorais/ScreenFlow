@@ -19,6 +19,19 @@ function isAllowedFileUrl(url: string): boolean {
   }
 }
 
+// The form sends ISO instants already converted from the user's local time.
+function parseSchedule(startRaw: string | null, endRaw: string | null) {
+  const startDate = startRaw ? new Date(startRaw) : new Date();
+  const endDate = endRaw ? new Date(endRaw) : null;
+  if (isNaN(startDate.getTime()) || (endDate && isNaN(endDate.getTime()))) {
+    throw new Error("Data inválida");
+  }
+  if (endDate && endDate <= startDate) {
+    throw new Error("A data de fim precisa ser depois do início");
+  }
+  return { startDate, endDate };
+}
+
 export async function createMedia(screenId: string, formData: FormData) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
@@ -32,8 +45,10 @@ export async function createMedia(screenId: string, formData: FormData) {
   const fileUrl = formData.get("fileUrl") as string;
   const type = formData.get("type") as string;
   const durationSeconds = parseInt(formData.get("durationSeconds") as string) || 10;
-  const startDate = formData.get("startDate") as string;
-  const endDate = formData.get("endDate") as string;
+  const { startDate, endDate } = parseSchedule(
+    formData.get("startDate") as string | null,
+    formData.get("endDate") as string | null,
+  );
   const slotRaw = (formData.get("slot") as string | null)?.trim() || "";
 
   if (!title?.trim()) throw new Error("Título é obrigatório");
@@ -80,8 +95,8 @@ export async function createMedia(screenId: string, formData: FormData) {
       durationSeconds: clampedDuration,
       orderIndex: (lastMedia?.orderIndex ?? -1) + 1,
       slot,
-      startDate: startDate ? new Date(startDate) : new Date(),
-      endDate: endDate ? new Date(endDate) : null,
+      startDate,
+      endDate,
       isEnabled: true,
       createdById: session.user.id,
     },
@@ -112,8 +127,10 @@ export async function updateMedia(mediaId: string, screenId: string, formData: F
   const fileUrl = formData.get("fileUrl") as string;
   const type = formData.get("type") as string;
   const durationSeconds = parseInt(formData.get("durationSeconds") as string) || 10;
-  const startDate = formData.get("startDate") as string;
-  const endDate = formData.get("endDate") as string;
+  const { startDate, endDate } = parseSchedule(
+    formData.get("startDate") as string | null,
+    formData.get("endDate") as string | null,
+  );
   const isEnabled = formData.get("isEnabled") === "true";
 
   if (!title?.trim()) throw new Error("Título é obrigatório");
@@ -137,8 +154,8 @@ export async function updateMedia(mediaId: string, screenId: string, formData: F
       fileUrl: fileUrl.trim(),
       type: type === "VIDEO" ? "VIDEO" : "IMAGE",
       durationSeconds,
-      startDate: startDate ? new Date(startDate) : new Date(),
-      endDate: endDate ? new Date(endDate) : null,
+      startDate,
+      endDate,
       isEnabled,
     },
   });

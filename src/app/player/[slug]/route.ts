@@ -30,9 +30,11 @@ export async function GET(
     return new NextResponse("Tela nao encontrada", { status: 404 });
   }
 
+  // Only medias inside their start/end window. The heartbeat tells the page to
+  // reload when a window opens or closes, so this is re-evaluated on time.
   const now = new Date();
   const activeMedias = screen.medias.filter(
-    (m) => !m.endDate || new Date(m.endDate) > now
+    (m) => m.startDate <= now && (!m.endDate || m.endDate > now)
   );
 
   const layout = getLayoutDefinition(screen.layoutTemplate, screen.customLayout);
@@ -80,6 +82,7 @@ export async function GET(
 
   const configJSON = JSON.stringify({
     token: screen.token,
+    renderedAt: now.toISOString(),
     screenName: screen.name,
     companyName: screen.company.name,
     intervalSeconds: screen.intervalSeconds,
@@ -409,7 +412,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
           }catch(e){}
         }
       };
-      xhr.send(JSON.stringify({ bootedAt: bootedAt }));
+      xhr.send(JSON.stringify({ bootedAt: bootedAt, renderedAt: config.renderedAt }));
     }catch(e){}
   }
 
