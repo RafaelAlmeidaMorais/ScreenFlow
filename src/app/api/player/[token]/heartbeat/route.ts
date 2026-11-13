@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
-import { toPlayerOutput } from "@/lib/output-mapping";
+import { parsePlayerDisplay, toPlayerOutput } from "@/lib/output-mapping";
 import { parseOfflineStatus } from "@/lib/offline-mode";
 
 export async function POST(
@@ -40,11 +40,14 @@ export async function POST(
   // copy when the screen has offline mode on.
   const now = new Date();
   const offlineStatus = screen.offlineEnabled ? parseOfflineStatus(body.offline, now) : null;
+  // Resolution the TV box's browser really draws at (shown next to the output settings).
+  const display = parsePlayerDisplay(body.display, now);
   await prisma.screen.update({
     where: { id: screen.id },
     data: {
       lastSeenAt: now,
       ...(offlineStatus ? { offlineStatus: { ...offlineStatus } } : {}),
+      ...(display ? { playerDisplay: { ...display } } : {}),
     },
   });
 

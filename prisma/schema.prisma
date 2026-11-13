@@ -58,6 +58,7 @@ model Screen {
   outputMapping      Json?
   offlineEnabled     Boolean   @default(false)
   offlineStatus      Json?
+  playerDisplay      Json?
   createdAt          DateTime  @default(now())
   company            Company   @relation(fields: [companyId], references: [id])
   medias             Media[]

@@ -83,8 +83,8 @@ export async function GET(req: NextRequest) {
 html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;color:#fff}
 .wrap{position:fixed;top:0;left:0;width:100%;height:100%;display:flex;align-items:center;justify-content:center;padding:4vmin;background:radial-gradient(ellipse at top,#1a1a1a 0%,#0a0a0a 60%)}
 .card{text-align:center;max-width:90vmin}
-.logo{font-size:5vmin;font-weight:700;letter-spacing:-0.5px;margin-bottom:1vmin}
-.logo .brand{color:#e87b35}
+.logo{margin-bottom:2vmin}
+.logo img{height:8vmin;width:auto;display:inline-block}
 .sub{color:rgba(255,255,255,0.4);font-size:2.2vmin;margin-bottom:5vmin}
 .code-label{color:rgba(255,255,255,0.5);font-size:2vmin;text-transform:uppercase;letter-spacing:2px;margin-bottom:3vmin}
 .code{font-family:"SF Mono",Consolas,Monaco,monospace;font-size:18vmin;font-weight:900;letter-spacing:2vmin;color:#e87b35;line-height:1;text-shadow:0 0 30px rgba(232,123,53,0.3);margin-bottom:5vmin}
@@ -99,7 +99,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#0a0a0a;color:#fff}
 <body>
 <div class="wrap">
   <div class="card">
-    <div class="logo">Screen<span class="brand">Flow</span></div>
+    <div class="logo"><img src="/logo.svg" alt="ScreenFlow"></div>
     <div class="sub">Dispositivo não pareado</div>
     <div class="code-label">Código de pareamento</div>
     <div class="code" id="code">${displayCode}</div>

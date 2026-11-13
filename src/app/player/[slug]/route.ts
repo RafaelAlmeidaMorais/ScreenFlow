@@ -105,19 +105,21 @@ export async function GET(
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000}
 #player{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;overflow:hidden;cursor:none;-webkit-transform-origin:0 0;transform-origin:0 0}
-#output-grid{position:absolute;top:0;left:0;width:100%;height:100%;z-index:5000;display:none;pointer-events:none;box-sizing:border-box;border:4px solid #00e676;background-color:rgba(0,0,0,0.6);background-image:linear-gradient(rgba(255,255,255,0.28) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.28) 1px,transparent 1px);background-size:10% 10%;font-family:sans-serif;color:#fff}
-#output-grid .og-circle{position:absolute;top:50%;left:50%;width:60vh;height:60vh;margin:-30vh 0 0 -30vh;border:3px solid #fff;border-radius:50%}
+#output-grid{position:absolute;top:0;left:0;width:100%;height:100%;z-index:5000;display:none;pointer-events:none;box-sizing:border-box;border:2px solid #00e676;background-color:rgba(0,0,0,0.6);background-image:linear-gradient(rgba(255,255,255,0.28) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.28) 1px,transparent 1px);background-size:10% 10%;font-family:sans-serif;color:#fff;overflow:hidden}
+#output-grid .og-circle{position:absolute;top:50%;left:50%;border:2px solid #fff;border-radius:50%}
 #output-grid .og-h{position:absolute;top:50%;left:0;width:100%;height:2px;margin-top:-1px;background:#00e676}
 #output-grid .og-v{position:absolute;left:50%;top:0;height:100%;width:2px;margin-left:-1px;background:#00e676}
-#output-grid .og-corner{position:absolute;width:9vh;height:9vh;border:0 solid #ff5252}
-#output-grid .og-tl{top:0;left:0;border-top-width:1.4vh;border-left-width:1.4vh}
-#output-grid .og-tr{top:0;right:0;border-top-width:1.4vh;border-right-width:1.4vh}
-#output-grid .og-bl{bottom:0;left:0;border-bottom-width:1.4vh;border-left-width:1.4vh}
-#output-grid .og-br{bottom:0;right:0;border-bottom-width:1.4vh;border-right-width:1.4vh}
-#output-grid .og-label{position:absolute;top:50%;left:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);text-align:center;background:rgba(0,0,0,0.75);padding:2vh 3vh;border-radius:1vh;white-space:nowrap}
-#output-grid .og-title{font-size:3.4vh;font-weight:bold}
-#output-grid .og-values{font-size:2.8vh;margin-top:1vh;color:#00e676}
-#output-grid .og-hint{font-size:2vh;margin-top:1vh;color:rgba(255,255,255,0.6)}
+#output-grid .og-corner{position:absolute;border:0 solid #ff5252}
+#output-grid .og-tl{top:0;left:0}
+#output-grid .og-tr{top:0;right:0}
+#output-grid .og-bl{bottom:0;left:0}
+#output-grid .og-br{bottom:0;right:0}
+#output-grid .og-label{position:absolute;top:50%;left:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);text-align:center;background:rgba(0,0,0,0.8);white-space:nowrap;line-height:1.25}
+#output-grid .og-title{font-weight:bold}
+#output-grid .og-values{color:#00e676}
+#output-grid .og-hint{color:rgba(255,255,255,0.7)}
+#player.fit-stretch .slide img,#player.fit-stretch .slide video{object-fit:fill}
+#player.fit-cover .slide img,#player.fit-cover .slide video{object-fit:cover}
 .zone{position:absolute;overflow:hidden;background:#000}
 .slide{position:absolute;top:0;left:0;width:100%;height:100%;display:none}
 .slide.active{display:block}
@@ -160,7 +162,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
     var totalMedias = 0;
     for(z = 0; z < zones.length; z++){ totalMedias += zones[z].medias.length; }
     if(totalMedias === 0){
-      html += '<div class="empty-state" style="width:100%;height:100%;position:fixed;top:0;left:0">';
+      html += '<div class="empty-state">';
       html += '<div class="empty-inner">';
       html += '<h1>' + escapeHtml(config.screenName) + '</h1>';
       html += '<p>' + escapeHtml(config.companyName) + '</p>';
@@ -432,7 +434,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
           }
         }
       };
-      xhr.send(JSON.stringify({ bootedAt: bootedAt, renderedAt: config.renderedAt, offline: offlineStatus }));
+      xhr.send(JSON.stringify({ bootedAt: bootedAt, renderedAt: config.renderedAt, offline: offlineStatus, display: displayInfo() }));
     }catch(e){}
   }
 
@@ -628,14 +630,27 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
     }catch(e){}
   }
 
-  // Output mapping: fits the whole player into a rectangle of the signal,
-  // like the scaler of a video processor. Positions come in pixels of the
-  // signal (rw x rh) and are converted to this page's own size.
+  // Output mapping: places the player inside a rectangle of the signal, like
+  // the scaler of a video processor. Positions come in pixels of the signal
+  // (rw x rh) and are converted to this page's own size.
+  //   native: the player is laid out at the rectangle's own size, aligned to
+  //           whole device pixels, so art made at the panel's resolution is
+  //           drawn pixel for pixel. "fit" is how medias fill their zone.
+  //   legacy: the player is laid out at the full page size and shrunk into
+  //           the rectangle with a CSS transform (first version).
   var currentOutput = null;
   var outputKey = "";
   var outputPollTimer = null;
   var adjustEndsAt = 0;
   var outputGrid = null;
+
+  function displayInfo(){
+    return {
+      w: window.innerWidth,
+      h: window.innerHeight,
+      dpr: window.devicePixelRatio || 1
+    };
+  }
 
   function buildOutputGrid(){
     outputGrid = document.createElement("div");
@@ -645,15 +660,76 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
       '<div class="og-corner og-tl"></div><div class="og-corner og-tr"></div>' +
       '<div class="og-corner og-bl"></div><div class="og-corner og-br"></div>' +
       '<div class="og-label"><div class="og-title"></div><div class="og-values"></div>' +
+      '<div class="og-pixels"></div>' +
       '<div class="og-hint">Os 4 cantos vermelhos e a borda verde devem aparecer inteiros</div></div>';
     player.appendChild(outputGrid);
   }
 
+  function setBox(left, top, width, height){
+    var s = player.style;
+    s.left = left; s.top = top; s.width = width; s.height = height;
+  }
+
+  function setTransform(t){
+    player.style.webkitTransform = t;
+    player.style.transform = t;
+  }
+
+  // Grid elements are sized from the area they cover (w x h, in CSS px) so
+  // the grid reads the same on a 4:1 LED strip and on a full TV.
+  function sizeGrid(w, h){
+    var small = Math.min(w, h);
+    var unit = Math.max(Math.min(h, w / 2) / 100, 4.5);
+    var els = outputGrid.children;
+    for(var i = 0; i < els.length; i++){
+      var c = els[i].className;
+      var st = els[i].style;
+      if(c === "og-circle"){
+        var d = small * 0.6;
+        st.width = d + "px"; st.height = d + "px";
+        st.marginLeft = (-d / 2) + "px"; st.marginTop = (-d / 2) + "px";
+      } else if(c.indexOf("og-corner") === 0){
+        var size = Math.max(small * 0.12, 10), bw = Math.max(small * 0.025, 3);
+        st.width = size + "px"; st.height = size + "px";
+        st.borderTopWidth = c.indexOf("og-t") !== -1 ? bw + "px" : "0";
+        st.borderBottomWidth = c.indexOf("og-b") !== -1 ? bw + "px" : "0";
+        st.borderLeftWidth = (c.indexOf("og-tl") !== -1 || c.indexOf("og-bl") !== -1) ? bw + "px" : "0";
+        st.borderRightWidth = (c.indexOf("og-tr") !== -1 || c.indexOf("og-br") !== -1) ? bw + "px" : "0";
+      } else if(c === "og-label"){
+        st.padding = (unit * 1.2) + "px " + (unit * 2) + "px";
+        st.borderRadius = unit + "px";
+        var kids = els[i].children;
+        var sizes = { "og-title": 3.4, "og-values": 2.6, "og-pixels": 2.6, "og-hint": 2 };
+        for(var k = 0; k < kids.length; k++){
+          kids[k].style.fontSize = (unit * (sizes[kids[k].className] || 2.4)) + "px";
+        }
+      }
+    }
+  }
+
   function renderOutput(){
     var o = currentOutput;
-    var t = "none";
-    if(o && o.on && o.rw > 0 && o.rh > 0){
-      var vw = window.innerWidth, vh = window.innerHeight;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var dpr = window.devicePixelRatio || 1;
+    var boxW = vw, boxH = vh;
+    var mode = "full";
+
+    player.className = "";
+    if(o && o.on && o.rw > 0 && o.rh > 0 && o.mode === "native"){
+      mode = "native";
+      // Snap every edge to a whole device pixel so the picture isn't resampled
+      // half a pixel off.
+      var snap = function(v){ return Math.round(v * dpr) / dpr; };
+      var left = snap(o.x / o.rw * vw), top = snap(o.y / o.rh * vh);
+      var right = snap((o.x + o.w) / o.rw * vw), bottom = snap((o.y + o.h) / o.rh * vh);
+      boxW = Math.max(1, right - left); boxH = Math.max(1, bottom - top);
+      setTransform("none");
+      setBox(left + "px", top + "px", boxW + "px", boxH + "px");
+      if(o.fit === "stretch") player.className = "fit-stretch";
+      else if(o.fit === "cover") player.className = "fit-cover";
+    } else if(o && o.on && o.rw > 0 && o.rh > 0){
+      mode = "legacy";
+      setBox("0", "0", "100%", "100%");
       var sx = o.w / o.rw, sy = o.h / o.rh, x = o.x, y = o.y;
       if(o.fit === "contain"){
         var s = Math.min(sx, sy);
@@ -661,18 +737,25 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
         y += (o.h - o.rh * s) / 2;
         sx = s; sy = s;
       }
-      t = "translate(" + (x / o.rw * vw) + "px," + (y / o.rh * vh) + "px) scale(" + sx + "," + sy + ")";
+      setTransform("translate(" + (x / o.rw * vw) + "px," + (y / o.rh * vh) + "px) scale(" + sx + "," + sy + ")");
+    } else {
+      setBox("0", "0", "100%", "100%");
+      setTransform("none");
     }
-    player.style.webkitTransform = t;
-    player.style.transform = t;
+
     if(outputGrid){
       var adjusting = !!(o && o.adjusting);
       outputGrid.style.display = adjusting ? "block" : "none";
       if(adjusting){
+        sizeGrid(boxW, boxH);
+        var drawnW = Math.round(boxW * dpr), drawnH = Math.round(boxH * dpr);
         outputGrid.getElementsByClassName("og-title")[0].innerHTML = escapeHtml(config.screenName);
-        outputGrid.getElementsByClassName("og-values")[0].innerHTML = o.on
-          ? "X " + o.x + " &nbsp; Y " + o.y + " &nbsp; L " + o.w + " &nbsp; A " + o.h + " &nbsp; (sinal " + o.rw + " x " + o.rh + ")"
-          : "Tela cheia (encaixe desligado)";
+        outputGrid.getElementsByClassName("og-values")[0].innerHTML = mode === "full"
+          ? "Tela cheia (encaixe desligado)"
+          : "X " + o.x + " &nbsp; Y " + o.y + " &nbsp; L " + o.w + " &nbsp; A " + o.h + " &nbsp; (sinal " + o.rw + " x " + o.rh + ")";
+        outputGrid.getElementsByClassName("og-pixels")[0].innerHTML =
+          "TV desenha a pagina em " + Math.round(vw * dpr) + " x " + Math.round(vh * dpr) + " px" +
+          (mode !== "native" ? "" : " &nbsp;|&nbsp; esta area: " + drawnW + " x " + drawnH + " px");
       }
     }
   }
@@ -688,7 +771,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
 
   function setOutput(o){
     if(!o) return;
-    var key = [o.on, o.rw, o.rh, o.x, o.y, o.w, o.h, o.fit, o.adjusting].join("|");
+    var key = [o.on, o.mode, o.rw, o.rh, o.x, o.y, o.w, o.h, o.fit, o.adjusting].join("|");
     currentOutput = o;
     if(key !== outputKey){
       outputKey = key;

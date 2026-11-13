@@ -1,6 +1,7 @@
 "use client";
 
 import { signOut } from "next-auth/react";
+import { BrandLogo } from "@/components/brand-logo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -30,24 +31,7 @@ export function Topbar({ user }: TopbarProps) {
     <header className="flex items-center justify-between h-16 px-6 lg:px-8 border-b border-border/50 bg-background/80 backdrop-blur-sm">
       <div className="flex items-center gap-3">
         <div className="lg:hidden flex items-center gap-2">
-          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-orange/10">
-            <svg
-              className="w-4 h-4 text-orange"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 20.25h12m-7.5-3v3m3-3v3m-10.125-3h17.25c.621 0 1.125-.504 1.125-1.125V4.875c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125Z"
-              />
-            </svg>
-          </div>
-          <span className="text-base font-semibold">
-            Screen<span className="text-orange">Flow</span>
-          </span>
+          <BrandLogo className="h-6" />
         </div>
         <div className="hidden lg:block">
           <p className="text-sm text-muted-foreground">

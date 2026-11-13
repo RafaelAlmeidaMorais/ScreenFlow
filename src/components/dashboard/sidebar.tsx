@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/brand-logo";
 
 interface NavItem {
   name: string;
@@ -138,25 +139,10 @@ export function Sidebar({ isSuperAdmin = false, role = "VIEWER" }: SidebarProps)
   return (
     <aside className="hidden lg:flex flex-col w-64 border-r border-border/50 bg-sidebar">
       {/* Logo */}
-      <div className="flex items-center gap-3 px-6 h-16 border-b border-border/50">
-        <div className="flex items-center justify-center w-9 h-9 rounded-xl bg-orange/10 border border-orange/20">
-          <svg
-            className="w-5 h-5 text-orange"
-            fill="none"
-            viewBox="0 0 24 24"
-            strokeWidth={1.5}
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M6 20.25h12m-7.5-3v3m3-3v3m-10.125-3h17.25c.621 0 1.125-.504 1.125-1.125V4.875c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125Z"
-            />
-          </svg>
-        </div>
-        <span className="text-lg font-semibold tracking-tight">
-          Screen<span className="text-orange">Flow</span>
-        </span>
+      <div className="flex items-center px-6 h-16 border-b border-border/50">
+        <Link href="/dashboard" aria-label="ScreenFlow — início do painel">
+          <BrandLogo className="h-7" priority />
+        </Link>
       </div>
 
       {/* Navigation */}

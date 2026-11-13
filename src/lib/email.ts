@@ -43,3 +43,63 @@ export async function sendPasswordResetEmail(
     `,
   });
 }
+
+export interface QuoteRequest {
+  name: string;
+  company: string;
+  email: string;
+  phone: string;
+  screens: string;
+  segment: string;
+  message: string;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export async function sendQuoteRequestEmail(to: string, data: QuoteRequest) {
+  const rows: [string, string][] = [
+    ["Nome", data.name],
+    ["Empresa", data.company],
+    ["Email", data.email],
+    ["Telefone / WhatsApp", data.phone],
+    ["Quantidade de telas", data.screens],
+    ["Segmento", data.segment],
+  ];
+
+  const tableRows = rows
+    .map(
+      ([label, value]) => `
+        <tr>
+          <td style="padding: 8px 12px; color: #888; font-size: 13px; white-space: nowrap;">${label}</td>
+          <td style="padding: 8px 12px; color: #222; font-size: 14px;">${escapeHtml(value || "—")}</td>
+        </tr>`
+    )
+    .join("");
+
+  const resend = getResend();
+  await resend.emails.send({
+    from: FROM_EMAIL,
+    to,
+    replyTo: data.email,
+    subject: `ScreenFlow — Novo pedido de orçamento: ${data.company || data.name}`,
+    html: `
+      <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; padding: 32px;">
+        <h2 style="color: #e87b35; margin-bottom: 16px;">Novo pedido de orçamento</h2>
+        <table style="width: 100%; border-collapse: collapse; background: #fafafa; border-radius: 8px;">
+          ${tableRows}
+        </table>
+        <h3 style="color: #333; font-size: 14px; margin: 24px 0 8px;">Mensagem</h3>
+        <p style="color: #333; font-size: 14px; line-height: 1.6; white-space: pre-wrap;">${escapeHtml(data.message || "—")}</p>
+        <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />
+        <p style="color: #bbb; font-size: 11px;">Enviado pelo formulário da landing page do ScreenFlow. Responda este email para falar direto com o cliente.</p>
+      </div>
+    `,
+  });
+}

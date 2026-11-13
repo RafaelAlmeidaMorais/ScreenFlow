@@ -10,7 +10,7 @@ import { WidgetPriceTableEditor } from "@/components/dashboard/widget-price-tabl
 import { MediaSortableList } from "@/components/dashboard/media-sortable-list";
 import { ScreenPlayerControls } from "@/components/dashboard/screen-player-controls";
 import { OutputMappingPanel } from "@/components/dashboard/output-mapping-panel";
-import { DEFAULT_OUTPUT_MAPPING, parseOutputMapping } from "@/lib/output-mapping";
+import { DEFAULT_OUTPUT_MAPPING, parseOutputMapping, parsePlayerDisplay } from "@/lib/output-mapping";
 import { OfflineModePanel } from "@/components/dashboard/offline-mode-panel";
 import { parseOfflineStatus } from "@/lib/offline-mode";
 import { getLayoutDefinition } from "@/lib/layouts";
@@ -278,6 +278,8 @@ export default async function ScreenDetailPage({ params }: Props) {
         />
         <OutputMappingPanel
           screenId={screen.id}
+          display={parsePlayerDisplay(screen.playerDisplay)}
+          zones={layout.slots.map((s) => ({ label: s.label, width: s.width, height: s.height }))}
           initial={outputDraft}
           initialAdjustMs={
             outputAdjustUntil ? Math.max(0, new Date(outputAdjustUntil).getTime() - now.getTime()) : 0

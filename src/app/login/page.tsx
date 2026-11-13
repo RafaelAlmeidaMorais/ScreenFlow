@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { BrandLogo } from "@/components/brand-logo";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -59,23 +60,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md px-6">
         {/* Logo & Brand */}
         <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-orange/10 border border-orange/20 mb-6">
-            <svg
-              className="w-8 h-8 text-orange"
-              fill="none"
-              viewBox="0 0 24 24"
-              strokeWidth={1.5}
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 20.25h12m-7.5-3v3m3-3v3m-10.125-3h17.25c.621 0 1.125-.504 1.125-1.125V4.875c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125Z"
-              />
-            </svg>
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Screen<span className="text-orange">Flow</span>
+          <h1>
+            <BrandLogo className="h-12 mx-auto" priority />
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Gestão de telas corporativas

@@ -3,25 +3,50 @@
 import { useEffect, useRef, useState } from "react";
 import { saveOutputMapping } from "@/app/dashboard/screens/actions";
 import { Switch } from "@/components/ui/switch";
+import { LocalDateTime } from "@/components/dashboard/media-schedule-fields";
 import {
   ADJUST_MODE_MINUTES,
   OUTPUT_SIGNALS,
   parseOutputMapping,
+  type OutputFit,
   type OutputMapping,
+  type PlayerDisplay,
 } from "@/lib/output-mapping";
 
 type Draft = Omit<OutputMapping, "adjustUntil">;
+
+interface ZoneShare {
+  label: string;
+  /** Share of the screen, in percent. */
+  width: number;
+  height: number;
+}
 
 interface Props {
   screenId: string;
   initial: Draft;
   /** Time left of an adjust mode that was already on when the page loaded. */
   initialAdjustMs: number;
+  /** How the TV box last said it draws the page. Null until a player with this version reports. */
+  display: PlayerDisplay | null;
+  /** Zones of the screen's layout, to show the art size of each one. */
+  zones: ZoneShare[];
 }
+
+const NATIVE_FITS: { value: OutputFit; label: string; hint: string }[] = [
+  { value: "contain", label: "Manter", hint: "Cada mídia mantém a proporção; se não for do formato da área, sobra faixa preta." },
+  { value: "cover", label: "Preencher", hint: "Cada mídia preenche a área sem distorcer; o que passar das bordas é cortado." },
+  { value: "stretch", label: "Esticar", hint: "Cada mídia é achatada ou esticada para preencher a área inteira." },
+];
+
+const LEGACY_FITS: { value: OutputFit; label: string; hint: string }[] = [
+  { value: "stretch", label: "Esticar", hint: "A imagem é achatada para preencher a área inteira." },
+  { value: "contain", label: "Manter proporção", hint: "A imagem mantém a proporção; pode sobrar faixa preta dentro da área." },
+];
 
 const STEPS = [1, 10, 50];
 
-export function OutputMappingPanel({ screenId, initial, initialAdjustMs }: Props) {
+export function OutputMappingPanel({ screenId, initial, initialAdjustMs, display, zones }: Props) {
   const [m, setM] = useState<Draft>(initial);
   const [adjusting, setAdjusting] = useState(initialAdjustMs > 0);
   const [adjustMs, setAdjustMs] = useState(initialAdjustMs);
@@ -90,10 +115,26 @@ export function OutputMappingPanel({ screenId, initial, initialAdjustMs }: Props
     });
   }
 
+  // A mapping made with the first version keeps working as it was until the
+  // user moves it to the new mode, which needs the area adjusted again.
+  function switchToNative() {
+    update({ mode: "native", fit: "contain" });
+    toggleAdjusting(true);
+  }
+
   const signalValue = `${m.refWidth}x${m.refHeight}`;
   const knownSignal = OUTPUT_SIGNALS.some((s) => `${s.width}x${s.height}` === signalValue);
   const isFull = m.x === 0 && m.y === 0 && m.width === m.refWidth && m.height === m.refHeight;
   const portrait = m.refHeight > m.refWidth;
+  const native = m.mode === "native";
+  const fits = native ? NATIVE_FITS : LEGACY_FITS;
+  const fitHint = fits.find((f) => f.value === m.fit)?.hint ?? "";
+  // The page drawn with fewer pixels than the signal means the TV box blows
+  // the picture up on the way out.
+  const drawsLess =
+    !!display &&
+    (Math.max(display.pixelWidth, display.pixelHeight) < Math.max(m.refWidth, m.refHeight) - 1 ||
+      Math.min(display.pixelWidth, display.pixelHeight) < Math.min(m.refWidth, m.refHeight) - 1);
 
   return (
     <div className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-sm p-5">
@@ -103,7 +144,8 @@ export function OutputMappingPanel({ screenId, initial, initialAdjustMs }: Props
           aria-label="Ativar encaixe da saída"
           checked={m.enabled}
           onCheckedChange={(on) => {
-            update({ enabled: on });
+            // Nothing on air depends on an old mapping that was switched off.
+            update(on && !native ? { enabled: on, mode: "native", fit: "contain" } : { enabled: on });
             if (!on) setAdjusting(false);
           }}
         />
@@ -114,9 +156,29 @@ export function OutputMappingPanel({ screenId, initial, initialAdjustMs }: Props
 
       {m.enabled && (
         <div className="space-y-4 mt-4">
+          {!native && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 text-xs space-y-2">
+              <p className="text-amber-200/90">
+                Esta tela usa o encaixe antigo: o player monta a tela no tamanho do sinal inteiro e
+                depois reduz tudo para caber na área, o que perde nitidez.
+              </p>
+              <p className="text-muted-foreground">
+                No modo novo a tela é montada direto no tamanho da área, como se o painel fosse a
+                tela. Ao mudar, ajuste X, Y, Largura e Altura de novo para coincidir com o painel.
+              </p>
+              <button
+                type="button"
+                onClick={switchToNative}
+                className="h-8 px-3 rounded-md border border-amber-500/40 text-amber-200 hover:bg-amber-500/10 font-medium cursor-pointer"
+              >
+                Usar o modo novo
+              </button>
+            </div>
+          )}
+
           <div>
             <label htmlFor="output-signal" className="text-xs text-muted-foreground block mb-1">
-              Sinal da TV box
+              Resolução de saída da TV box (HDMI)
             </label>
             <select
               id="output-signal"
@@ -136,7 +198,8 @@ export function OutputMappingPanel({ screenId, initial, initialAdjustMs }: Props
               ))}
             </select>
             <p className="text-[11px] text-muted-foreground/70 mt-1">
-              Os valores abaixo são em pixels deste sinal.
+              Use a resolução configurada no Android da TV box. Os valores abaixo são em pixels
+              deste sinal.
             </p>
           </div>
 
@@ -179,20 +242,66 @@ export function OutputMappingPanel({ screenId, initial, initialAdjustMs }: Props
           </div>
 
           <div>
-            <div className="text-xs text-muted-foreground mb-1">Conteúdo</div>
-            <div className="grid grid-cols-2 gap-1">
-              <SegmentButton active={m.fit === "stretch"} onClick={() => update({ fit: "stretch" })}>
-                Esticar
-              </SegmentButton>
-              <SegmentButton active={m.fit === "contain"} onClick={() => update({ fit: "contain" })}>
-                Manter proporção
-              </SegmentButton>
+            <div className="text-xs text-muted-foreground mb-1">
+              {native ? "Mídias na área" : "Conteúdo"}
             </div>
-            <p className="text-[11px] text-muted-foreground/70 mt-1">
-              {m.fit === "stretch"
-                ? "A imagem é achatada para preencher a área inteira."
-                : "A imagem mantém a proporção; pode sobrar faixa preta dentro da área."}
-            </p>
+            <div className={`grid gap-1 ${native ? "grid-cols-3" : "grid-cols-2"}`}>
+              {fits.map((f) => (
+                <SegmentButton key={f.value} active={m.fit === f.value} onClick={() => update({ fit: f.value })}>
+                  {f.label}
+                </SegmentButton>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground/70 mt-1">{fitHint}</p>
+          </div>
+
+          {native && (
+            <div className="rounded-xl border border-border/50 bg-background/50 px-3 py-2.5 text-xs space-y-1.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-muted-foreground">Tamanho ideal da arte</span>
+                <span className="font-semibold tabular-nums">
+                  {m.width} × {m.height} px
+                </span>
+              </div>
+              {zones.length > 1 &&
+                zones.map((z) => (
+                  <div key={z.label} className="flex items-center justify-between gap-2 pl-2">
+                    <span className="text-muted-foreground truncate">{z.label}</span>
+                    <span className="tabular-nums">
+                      {Math.round((m.width * z.width) / 100)} × {Math.round((m.height * z.height) / 100)} px
+                    </span>
+                  </div>
+                ))}
+              <p className="text-muted-foreground/70">
+                Com a arte neste tamanho, ela é exibida pixel a pixel, sem ser redimensionada.
+              </p>
+            </div>
+          )}
+
+          <div className="rounded-xl border border-border/50 bg-background/50 px-3 py-2.5 text-xs space-y-1">
+            {display ? (
+              <>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-muted-foreground">A TV box desenha em</span>
+                  <span className={`font-semibold tabular-nums ${drawsLess ? "text-amber-300" : "text-emerald-400"}`}>
+                    {display.pixelWidth} × {display.pixelHeight} px
+                  </span>
+                </div>
+                <p className={drawsLess ? "text-amber-200/90" : "text-muted-foreground/70"}>
+                  {drawsLess
+                    ? `Menos que a saída escolhida (${m.refWidth} × ${m.refHeight}): a TV box amplia a imagem ao enviar para a tela e ela perde nitidez. Veja a resolução de tela nas configurações do Android da TV box.`
+                    : "Igual ou maior que a saída escolhida: a TV box não precisa ampliar a imagem."}
+                </p>
+                <p className="text-muted-foreground/60">
+                  Informado pela TV em <LocalDateTime iso={display.at} />
+                </p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">
+                Aguardando a TV informar em que resolução desenha. Aparece em até 30 segundos depois
+                que o player carregar esta versão.
+              </p>
+            )}
           </div>
 
           <div>

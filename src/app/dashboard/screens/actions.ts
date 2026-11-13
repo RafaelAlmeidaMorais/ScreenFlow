@@ -427,6 +427,7 @@ export async function saveOutputMapping(screenId: string, input: unknown, adjust
       details: {
         action: "output_mapping",
         enabled: mapping.enabled,
+        mode: mapping.mode,
         signal: `${mapping.refWidth}x${mapping.refHeight}`,
         x: mapping.x,
         y: mapping.y,
