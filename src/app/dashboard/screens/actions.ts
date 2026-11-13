@@ -15,6 +15,7 @@ import {
 } from "@/lib/layouts";
 import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { ADJUST_MODE_MINUTES, parseOutputMapping } from "@/lib/output-mapping";
 
 const VALID_ORIENTATIONS: Orientation[] = ["LANDSCAPE", "PORTRAIT"];
 const VALID_ASPECT_RATIOS: AspectRatio[] = ["AUTO", "16:9", "9:16", "4:3", "1:1"];
@@ -229,6 +230,47 @@ export async function refreshScreen(screenId: string) {
   revalidatePath(`/dashboard/screens/${screenId}`);
 }
 
+/**
+ * Turns offline mode on or off for a screen. The player is asked to reload so
+ * it starts saving its page and media on the TV box (or throws the copy away).
+ */
+export async function setOfflineMode(screenId: string, enabled: boolean) {
+  const session = await auth();
+  if (!session) throw new Error("Não autorizado");
+
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
+  const whereClause = session.user.isSuperAdmin
+    ? { id: screenId }
+    : { id: screenId, companyId: session.user.companyId };
+
+  const screen = await prisma.screen.findFirst({ where: whereClause, select: { id: true, companyId: true } });
+  if (!screen) throw new Error("Tela não encontrada");
+
+  await prisma.screen.update({
+    where: { id: screen.id },
+    data: {
+      offlineEnabled: enabled === true,
+      // What the device reported belongs to the previous setting.
+      offlineStatus: Prisma.DbNull,
+      refreshRequestedAt: new Date(),
+    },
+  });
+
+  await logAudit({
+    userId: session.user.id,
+    companyId: screen.companyId,
+    action: "UPDATE",
+    entity: "SCREEN",
+    entityId: screen.id,
+    details: { action: "offline_mode", enabled: enabled === true },
+  });
+
+  revalidatePath(`/dashboard/screens/${screen.id}`);
+}
+
 export async function duplicateScreen(screenId: string) {
   const session = await auth();
   if (!session) throw new Error("Não autorizado");
@@ -338,4 +380,63 @@ export async function deleteScreen(screenId: string) {
 
   revalidatePath("/dashboard/screens");
   revalidatePath("/dashboard");
+}
+
+/**
+ * Saves where the player's picture goes inside the signal. `adjusting` keeps
+ * the test grid on the TV and makes the player follow changes within a second.
+ */
+export async function saveOutputMapping(screenId: string, input: unknown, adjusting: boolean) {
+  const session = await auth();
+  if (!session) throw new Error("Não autorizado");
+
+  if (session.user.role === "VIEWER" && !session.user.isSuperAdmin) {
+    throw new Error("Sem permissão");
+  }
+
+  const mapping = parseOutputMapping(input);
+  if (!mapping) throw new Error("Configuração inválida");
+
+  const whereClause = session.user.isSuperAdmin
+    ? { id: screenId }
+    : { id: screenId, companyId: session.user.companyId };
+
+  const screen = await prisma.screen.findFirst({ where: whereClause, select: { id: true, companyId: true } });
+  if (!screen) throw new Error("Tela não encontrada");
+
+  // The grid switches itself off some minutes after the last change, so a
+  // forgotten adjust mode never stays on a client's panel.
+  mapping.adjustUntil = adjusting
+    ? new Date(Date.now() + ADJUST_MODE_MINUTES * 60_000).toISOString()
+    : null;
+
+  await prisma.screen.update({
+    where: { id: screen.id },
+    data: { outputMapping: { ...mapping } },
+  });
+
+  // One nudge per second while aligning would flood the log: record the
+  // result once, when the adjustment ends.
+  if (!adjusting) {
+    await logAudit({
+      userId: session.user.id,
+      companyId: screen.companyId,
+      action: "UPDATE",
+      entity: "SCREEN",
+      entityId: screen.id,
+      details: {
+        action: "output_mapping",
+        enabled: mapping.enabled,
+        signal: `${mapping.refWidth}x${mapping.refHeight}`,
+        x: mapping.x,
+        y: mapping.y,
+        width: mapping.width,
+        height: mapping.height,
+        fit: mapping.fit,
+      },
+    });
+    revalidatePath(`/dashboard/screens/${screen.id}`);
+  }
+
+  return { adjustUntil: mapping.adjustUntil };
 }

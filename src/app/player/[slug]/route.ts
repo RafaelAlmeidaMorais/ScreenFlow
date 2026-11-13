@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 import { getLayoutDefinition } from "@/lib/layouts";
 import { renderPriceTableHTML, type PriceTableConfig } from "@/lib/widgets";
+import { toPlayerOutput } from "@/lib/output-mapping";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,9 @@ export async function GET(
     autoRefreshMinutes: screen.autoRefreshMinutes,
     showProgressBar: screen.showProgressBar && isSingleSlot,
     isSingleSlot,
+    output: toPlayerOutput(screen.outputMapping, now),
+    offline: screen.offlineEnabled,
+    pagePath: "/player/" + encodeURIComponent(screen.slug),
   });
 
   const html = `<!DOCTYPE html>
@@ -100,7 +104,20 @@ export async function GET(
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:100%;height:100%;overflow:hidden;background:#000}
-#player{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;overflow:hidden;cursor:none}
+#player{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;overflow:hidden;cursor:none;-webkit-transform-origin:0 0;transform-origin:0 0}
+#output-grid{position:absolute;top:0;left:0;width:100%;height:100%;z-index:5000;display:none;pointer-events:none;box-sizing:border-box;border:4px solid #00e676;background-color:rgba(0,0,0,0.6);background-image:linear-gradient(rgba(255,255,255,0.28) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.28) 1px,transparent 1px);background-size:10% 10%;font-family:sans-serif;color:#fff}
+#output-grid .og-circle{position:absolute;top:50%;left:50%;width:60vh;height:60vh;margin:-30vh 0 0 -30vh;border:3px solid #fff;border-radius:50%}
+#output-grid .og-h{position:absolute;top:50%;left:0;width:100%;height:2px;margin-top:-1px;background:#00e676}
+#output-grid .og-v{position:absolute;left:50%;top:0;height:100%;width:2px;margin-left:-1px;background:#00e676}
+#output-grid .og-corner{position:absolute;width:9vh;height:9vh;border:0 solid #ff5252}
+#output-grid .og-tl{top:0;left:0;border-top-width:1.4vh;border-left-width:1.4vh}
+#output-grid .og-tr{top:0;right:0;border-top-width:1.4vh;border-right-width:1.4vh}
+#output-grid .og-bl{bottom:0;left:0;border-bottom-width:1.4vh;border-left-width:1.4vh}
+#output-grid .og-br{bottom:0;right:0;border-bottom-width:1.4vh;border-right-width:1.4vh}
+#output-grid .og-label{position:absolute;top:50%;left:50%;-webkit-transform:translate(-50%,-50%);transform:translate(-50%,-50%);text-align:center;background:rgba(0,0,0,0.75);padding:2vh 3vh;border-radius:1vh;white-space:nowrap}
+#output-grid .og-title{font-size:3.4vh;font-weight:bold}
+#output-grid .og-values{font-size:2.8vh;margin-top:1vh;color:#00e676}
+#output-grid .og-hint{font-size:2vh;margin-top:1vh;color:rgba(255,255,255,0.6)}
 .zone{position:absolute;overflow:hidden;background:#000}
 .slide{position:absolute;top:0;left:0;width:100%;height:100%;display:none}
 .slide.active{display:block}
@@ -394,25 +411,28 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
       xhr.open("POST", "/api/player/" + config.token + "/heartbeat", true);
       xhr.setRequestHeader("Content-Type", "application/json");
       xhr.onreadystatechange = function(){
-        if(xhr.readyState === 4 && xhr.status === 200){
+        if(xhr.readyState !== 4) return;
+        // Screen no longer exists: the scheduled reload shows that.
+        if(xhr.status === 404 && refreshDue){ window.location.reload(); return; }
+        if(xhr.status === 200){
           // Keep APK watchdog alive (DEBUG_SCRIPT forwards console.log to native).
           try{ console.log("hb"); }catch(e){}
-          try{
-            var data = JSON.parse(xhr.responseText);
-            // Restart has priority over unpair — an admin-triggered reload
-            // should always win, even if a stale device cookie also matched.
-            if(data && data.shouldRefresh){ window.location.reload(); return; }
-            if(data && data.shouldUnpair){
-              // Device was unpaired from the dashboard — flush playback and
-              // go back to the pairing page, which will show a fresh code.
-              flushPlayback(true);
-              window.location.replace("/player");
-              return;
-            }
-          }catch(e){}
+          var data = null;
+          try{ data = JSON.parse(xhr.responseText); }catch(e){}
+          // Restart has priority over unpair — an admin-triggered reload
+          // should always win, even if a stale device cookie also matched.
+          if((data && data.shouldRefresh) || refreshDue){ window.location.reload(); return; }
+          if(data && data.output) setOutput(data.output);
+          if(data && data.shouldUnpair){
+            // Device was unpaired from the dashboard — flush playback and
+            // go back to the pairing page, which will show a fresh code.
+            flushOnExit();
+            window.location.replace("/player");
+            return;
+          }
         }
       };
-      xhr.send(JSON.stringify({ bootedAt: bootedAt, renderedAt: config.renderedAt }));
+      xhr.send(JSON.stringify({ bootedAt: bootedAt, renderedAt: config.renderedAt, offline: offlineStatus }));
     }catch(e){}
   }
 
@@ -422,70 +442,140 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
   // of a silent reload loop.
   setInterval(function(){ try{ console.log("tick"); }catch(e){} }, 20000);
 
+  // The periodic reload waits for the next heartbeat the server answers.
+  // Reloading with the connection down would swap a playing screen for a
+  // blank error page until the internet comes back.
+  var refreshDue = false;
   function setupAutoRefresh(){
     if(config.autoRefreshMinutes > 0){
-      setTimeout(function(){ window.location.reload(); }, config.autoRefreshMinutes * 60 * 1000);
+      setTimeout(function(){ refreshDue = true; }, config.autoRefreshMinutes * 60 * 1000);
     }
   }
 
-  // Playback tracking — record when each media is displayed, flush in batches
-  var playbackQueue = [];
+  // Playback tracking. A finished play stays in "pending" until the server
+  // confirms it, so plays made while offline are delivered when the connection
+  // returns. The list is mirrored to localStorage to survive reloads and power
+  // cuts. Items are [mediaId, startMs, durationMs].
+  var PLAYBACK_URL = "/api/player/" + config.token + "/playback";
+  var PENDING_KEY = "sf_playback_" + config.token;
+  var MAX_PENDING = 20000; // about 2 days of 10s slides
+  var BATCH_SIZE = 200;    // server limit per request
+  var pending = loadPending();
+  var pendingDirty = false;
+  var inFlight = 0;
   var playbackStart = {}; // zoneIndex -> { mediaId, startMs }
+
+  function loadPending(){
+    try{
+      var raw = window.localStorage.getItem(PENDING_KEY);
+      var list = raw ? JSON.parse(raw) : [];
+      return (list && list instanceof Array) ? list : [];
+    }catch(e){ return []; }
+  }
+
+  function savePending(){
+    if(!pendingDirty) return;
+    try{
+      if(pending.length === 0) window.localStorage.removeItem(PENDING_KEY);
+      else window.localStorage.setItem(PENDING_KEY, JSON.stringify(pending));
+      pendingDirty = false;
+    }catch(e){}
+  }
+
+  function addPending(mediaId, startMs, durationMs){
+    // Ignore absurdly short plays (< 500ms, likely glitch) and keep a cap
+    if(durationMs < 500 || durationMs >= 24*3600*1000) return;
+    pending.push([mediaId, startMs, durationMs]);
+    if(pending.length > MAX_PENDING) pending.splice(0, pending.length - MAX_PENDING);
+    pendingDirty = true;
+  }
 
   function recordPlaybackStart(state){
     var m = state.medias[state.currentIndex];
     if(!m || !m.id) return;
-    playbackStart[state.index] = { mediaId: m.id, startMs: new Date().getTime(), playedAt: new Date().toISOString() };
+    playbackStart[state.index] = { mediaId: m.id, startMs: new Date().getTime() };
   }
 
   function recordPlaybackEnd(state){
     var entry = playbackStart[state.index];
     if(!entry) return;
-    var durationMs = new Date().getTime() - entry.startMs;
-    // Ignore absurdly short plays (< 500ms, likely glitch) and keep a cap
-    if(durationMs >= 500 && durationMs < 24*3600*1000){
-      playbackQueue.push({ mediaId: entry.mediaId, playedAt: entry.playedAt, durationMs: durationMs });
-    }
+    addPending(entry.mediaId, entry.startMs, new Date().getTime() - entry.startMs);
     playbackStart[state.index] = null;
-    // Flush when buffer gets big
-    if(playbackQueue.length >= 20) flushPlayback();
   }
 
-  function flushPlayback(useBeacon){
-    if(playbackQueue.length === 0) return;
-    var payload = JSON.stringify({ events: playbackQueue });
-    playbackQueue = [];
-    var url = "/api/player/" + config.token + "/playback";
-    if(useBeacon && navigator.sendBeacon){
-      try{
-        var blob = new Blob([payload], { type: "application/json" });
-        navigator.sendBeacon(url, blob);
-        return;
-      }catch(e){}
+  function toPayload(items){
+    var events = [];
+    for(var i = 0; i < items.length; i++){
+      events.push({
+        mediaId: items[i][0],
+        playedAt: new Date(items[i][1]).toISOString(),
+        durationMs: items[i][2]
+      });
+    }
+    return JSON.stringify({ events: events });
+  }
+
+  // Sends the oldest batch and drops it only when the server answers. A
+  // failed request leaves everything in place for the next attempt.
+  function sendPending(){
+    if(inFlight > 0 || pending.length === 0) return;
+    var batch = pending.slice(0, BATCH_SIZE);
+    var done = false;
+    inFlight = batch.length;
+    function finish(status){
+      if(done) return;
+      done = true;
+      inFlight = 0;
+      // Stored, or refused for good (screen removed, bad payload). 408, 429
+      // and 5xx are temporary: keep the batch.
+      var settled = (status >= 200 && status < 300) ||
+        (status >= 400 && status < 500 && status !== 408 && status !== 429);
+      if(!settled) return;
+      var removed = 0;
+      for(var i = 0; i < batch.length; i++){
+        if(pending[removed] === batch[i]) removed++;
+      }
+      pending.splice(0, removed);
+      pendingDirty = true;
+      savePending();
+      // Drain a backlog without tripping the rate limit of the server.
+      if(pending.length > 0) setTimeout(sendPending, 1500);
     }
     try{
       var xhr = new XMLHttpRequest();
-      xhr.open("POST", url, true);
+      xhr.open("POST", PLAYBACK_URL, true);
       xhr.setRequestHeader("Content-Type", "application/json");
-      xhr.send(payload);
+      xhr.timeout = 20000;
+      xhr.onreadystatechange = function(){ if(xhr.readyState === 4) finish(xhr.status); };
+      xhr.onerror = function(){ finish(0); };
+      xhr.ontimeout = function(){ finish(0); };
+      xhr.send(toPayload(batch));
+    }catch(e){ finish(0); }
+  }
+
+  // Page is going away: close the plays on screen, save, and make a last
+  // attempt for what is not already on its way. Everything also stays in
+  // localStorage for the next load; the server skips plays it already has.
+  function flushOnExit(){
+    var now = new Date().getTime();
+    for(var k in playbackStart){
+      if(playbackStart[k]){
+        addPending(playbackStart[k].mediaId, playbackStart[k].startMs, now - playbackStart[k].startMs);
+        playbackStart[k] = null;
+      }
+    }
+    savePending();
+    var rest = pending.slice(inFlight, inFlight + BATCH_SIZE);
+    if(rest.length === 0 || !navigator.sendBeacon) return;
+    try{
+      navigator.sendBeacon(PLAYBACK_URL, new Blob([toPayload(rest)], { type: "application/json" }));
     }catch(e){}
   }
 
-  // Flush playback periodically and on unload
-  setInterval(function(){ flushPlayback(false); }, 20000);
-  window.addEventListener('pagehide', function(){
-    // Close any active plays
-    for(var k in playbackStart){
-      if(playbackStart[k]){
-        var e = playbackStart[k];
-        var d = new Date().getTime() - e.startMs;
-        if(d >= 500 && d < 24*3600*1000){
-          playbackQueue.push({ mediaId: e.mediaId, playedAt: e.playedAt, durationMs: d });
-        }
-      }
-    }
-    flushPlayback(true);
-  });
+  setInterval(function(){ savePending(); sendPending(); }, 20000);
+  // Deliver what a previous session left behind soon after boot.
+  setTimeout(sendPending, 8000);
+  window.addEventListener('pagehide', flushOnExit);
 
   // Widget polling — refresh widget content every 30s without reloading
   var lastWidgetEtag = '';
@@ -538,8 +628,262 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000}
     }catch(e){}
   }
 
+  // Output mapping: fits the whole player into a rectangle of the signal,
+  // like the scaler of a video processor. Positions come in pixels of the
+  // signal (rw x rh) and are converted to this page's own size.
+  var currentOutput = null;
+  var outputKey = "";
+  var outputPollTimer = null;
+  var adjustEndsAt = 0;
+  var outputGrid = null;
+
+  function buildOutputGrid(){
+    outputGrid = document.createElement("div");
+    outputGrid.id = "output-grid";
+    outputGrid.innerHTML =
+      '<div class="og-h"></div><div class="og-v"></div><div class="og-circle"></div>' +
+      '<div class="og-corner og-tl"></div><div class="og-corner og-tr"></div>' +
+      '<div class="og-corner og-bl"></div><div class="og-corner og-br"></div>' +
+      '<div class="og-label"><div class="og-title"></div><div class="og-values"></div>' +
+      '<div class="og-hint">Os 4 cantos vermelhos e a borda verde devem aparecer inteiros</div></div>';
+    player.appendChild(outputGrid);
+  }
+
+  function renderOutput(){
+    var o = currentOutput;
+    var t = "none";
+    if(o && o.on && o.rw > 0 && o.rh > 0){
+      var vw = window.innerWidth, vh = window.innerHeight;
+      var sx = o.w / o.rw, sy = o.h / o.rh, x = o.x, y = o.y;
+      if(o.fit === "contain"){
+        var s = Math.min(sx, sy);
+        x += (o.w - o.rw * s) / 2;
+        y += (o.h - o.rh * s) / 2;
+        sx = s; sy = s;
+      }
+      t = "translate(" + (x / o.rw * vw) + "px," + (y / o.rh * vh) + "px) scale(" + sx + "," + sy + ")";
+    }
+    player.style.webkitTransform = t;
+    player.style.transform = t;
+    if(outputGrid){
+      var adjusting = !!(o && o.adjusting);
+      outputGrid.style.display = adjusting ? "block" : "none";
+      if(adjusting){
+        outputGrid.getElementsByClassName("og-title")[0].innerHTML = escapeHtml(config.screenName);
+        outputGrid.getElementsByClassName("og-values")[0].innerHTML = o.on
+          ? "X " + o.x + " &nbsp; Y " + o.y + " &nbsp; L " + o.w + " &nbsp; A " + o.h + " &nbsp; (sinal " + o.rw + " x " + o.rh + ")"
+          : "Tela cheia (encaixe desligado)";
+      }
+    }
+  }
+
+  function stopAdjusting(){
+    if(outputPollTimer){ clearInterval(outputPollTimer); outputPollTimer = null; }
+    if(currentOutput && currentOutput.adjusting){
+      currentOutput.adjusting = false;
+      outputKey = "";
+      renderOutput();
+    }
+  }
+
+  function setOutput(o){
+    if(!o) return;
+    var key = [o.on, o.rw, o.rh, o.x, o.y, o.w, o.h, o.fit, o.adjusting].join("|");
+    currentOutput = o;
+    if(key !== outputKey){
+      outputKey = key;
+      renderOutput();
+    }
+    if(o.adjusting){
+      // Follow the dashboard closely while someone is aligning the output.
+      adjustEndsAt = new Date().getTime() + (o.adjustMs || 0);
+      if(!outputPollTimer) outputPollTimer = setInterval(pollOutput, 1000);
+    } else {
+      stopAdjusting();
+    }
+  }
+
+  function pollOutput(){
+    // The grid must not stay on screen if the connection drops mid-adjustment.
+    if(new Date().getTime() > adjustEndsAt){ stopAdjusting(); return; }
+    try{
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", "/api/player/" + config.token + "/output", true);
+      xhr.timeout = 5000;
+      xhr.onreadystatechange = function(){
+        if(xhr.readyState !== 4 || xhr.status !== 200) return;
+        try{
+          var data = JSON.parse(xhr.responseText);
+          if(data && data.output) setOutput(data.output);
+        }catch(e){}
+      };
+      xhr.send();
+    }catch(e){}
+  }
+
+  window.addEventListener("resize", renderOutput);
+
+  // Offline mode (opt-in per screen). With it on, this page keeps a copy of
+  // itself and of every media it shows in the device's Cache storage, and the
+  // service worker (/player-sw.js) serves those copies when the network is
+  // gone. With it off, nothing is kept beyond the browser's normal cache.
+  var OFFLINE_PAGES = "sf-pages-v1";
+  var OFFLINE_MEDIA = "sf-media-v1";
+  var offlineStatus = null; // sent in every heartbeat when offline mode is on
+
+  function offlineSupported(){
+    return !!(navigator.serviceWorker && window.caches && window.fetch && window.Promise && window.URL);
+  }
+
+  function absoluteUrl(path){
+    return new URL(path, window.location.href).href;
+  }
+
+  // Every file the screen shows: the medias of each zone plus the images
+  // inside widgets (the logos of a price table, for instance).
+  function offlineMediaUrls(){
+    var urls = [];
+    function add(src){
+      if(!src || src.indexOf("data:") === 0 || src.indexOf("blob:") === 0) return;
+      var u = absoluteUrl(src);
+      if(urls.indexOf(u) === -1) urls.push(u);
+    }
+    for(var z = 0; z < zones.length; z++){
+      for(var i = 0; i < zones[z].medias.length; i++) add(zones[z].medias[i].fileUrl);
+    }
+    var tags = ["img", "video"];
+    for(var t = 0; t < tags.length; t++){
+      var els = player.getElementsByTagName(tags[t]);
+      for(var e = 0; e < els.length; e++) add(els[e].getAttribute("src"));
+    }
+    return urls;
+  }
+
+  function updateStorageEstimate(){
+    try{
+      if(!navigator.storage || !navigator.storage.estimate) return;
+      navigator.storage.estimate().then(function(est){
+        if(!offlineStatus) return;
+        offlineStatus.usage = est && typeof est.usage === "number" ? est.usage : null;
+        offlineStatus.quota = est && typeof est.quota === "number" ? est.quota : null;
+      })["catch"](function(){});
+    }catch(e){}
+  }
+
+  // Saves a fresh copy of this page. Offline the request fails and the copy
+  // already saved stays as it is.
+  function saveOfflinePage(){
+    return fetch(config.pagePath, { credentials: "same-origin", cache: "no-store" }).then(function(res){
+      if(!res || res.status !== 200) return null;
+      return caches.open(OFFLINE_PAGES).then(function(cache){
+        return Promise.all([
+          cache.put(absoluteUrl(config.pagePath), res.clone()),
+          cache.put(absoluteUrl("/player/__last"), res)
+        ]);
+      });
+    })["catch"](function(){});
+  }
+
+  // Downloads the medias that are not saved yet, one at a time, and drops the
+  // ones this screen no longer shows.
+  function saveOfflineMedia(){
+    var urls = offlineMediaUrls();
+    var status = { supported: true, total: urls.length, cached: 0, failed: 0, full: false, usage: null, quota: null };
+    if(offlineStatus){ status.usage = offlineStatus.usage; status.quota = offlineStatus.quota; }
+    offlineStatus = status;
+    return caches.open(OFFLINE_MEDIA).then(function(cache){
+      return cache.keys().then(function(keys){
+        var have = {};
+        var removals = [];
+        for(var k = 0; k < keys.length; k++){
+          if(urls.indexOf(keys[k].url) === -1) removals.push(cache["delete"](keys[k]));
+          else have[keys[k].url] = true;
+        }
+        return Promise.all(removals).then(function(){
+          var i = 0;
+          function next(){
+            if(i >= urls.length || status.full) return null;
+            var u = urls[i++];
+            if(have[u]){ status.cached++; return next(); }
+            return fetch(u, { mode: "cors", credentials: "omit" }).then(function(res){
+              if(!res || res.status !== 200) throw new Error("download");
+              return cache.put(u, res);
+            }).then(function(){
+              status.cached++;
+            }, function(err){
+              if(err && err.name === "QuotaExceededError") status.full = true;
+              else status.failed++;
+            }).then(function(){
+              updateStorageEstimate();
+              return next();
+            });
+          }
+          return next();
+        });
+      });
+    })["catch"](function(){}).then(updateStorageEstimate);
+  }
+
+  var offlineSyncing = false;
+  function offlineSync(){
+    if(offlineSyncing) return;
+    offlineSyncing = true;
+    saveOfflinePage().then(saveOfflineMedia).then(function(){ offlineSyncing = false; }, function(){ offlineSyncing = false; });
+  }
+
+  function startOffline(){
+    if(!offlineSupported()){
+      offlineStatus = { supported: false, total: 0, cached: 0, failed: 0, full: false, usage: null, quota: null };
+      return;
+    }
+    try{
+      navigator.serviceWorker.register("/player-sw.js", { scope: "/player" })["catch"](function(){});
+      // Asks the device not to evict the copy when it runs low on space.
+      if(navigator.storage && navigator.storage.persist) navigator.storage.persist()["catch"](function(){});
+    }catch(e){}
+    offlineSync();
+    // Picks up new prices and playlist changes, and retries failed downloads.
+    setInterval(offlineSync, 30 * 60 * 1000);
+  }
+
+  // Offline mode was switched off (or never on): leave nothing behind.
+  function stopOffline(){
+    if(!offlineSupported()) return;
+    try{
+      navigator.serviceWorker.getRegistrations().then(function(regs){
+        for(var i = 0; i < regs.length; i++){
+          if(regs[i].scope.indexOf("/player") !== -1) regs[i].unregister();
+        }
+      })["catch"](function(){});
+      caches["delete"](OFFLINE_PAGES)["catch"](function(){});
+      caches["delete"](OFFLINE_MEDIA)["catch"](function(){});
+    }catch(e){}
+  }
+
+  // This page came from the saved copy: go back to the live one as soon as
+  // the server answers a heartbeat. The wait grows after repeated saved loads
+  // so a connection good enough for the heartbeat but too slow for the page
+  // doesn't reload in a loop.
+  function reloadWhenBackOnline(){
+    var loads = 0;
+    try{
+      loads = parseInt(window.localStorage.getItem("sf_cache_loads") || "0", 10) || 0;
+      window.localStorage.setItem("sf_cache_loads", String(loads + 1));
+    }catch(e){}
+    var waits = [20, 120, 300, 900, 1800];
+    setTimeout(function(){ refreshDue = true; }, waits[Math.min(loads, waits.length - 1)] * 1000);
+  }
+
   // INIT
   buildPlayer();
+  buildOutputGrid();
+  setOutput(config.output);
+  if(window.__sfFromCache){
+    reloadWhenBackOnline();
+  } else {
+    try{ window.localStorage.removeItem("sf_cache_loads"); }catch(e){}
+  }
+  if(config.offline) startOffline(); else stopOffline();
   setTimeout(heartbeat, 5000);
   setInterval(heartbeat, 30000);
   setupAutoRefresh();

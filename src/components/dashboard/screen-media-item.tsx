@@ -1,29 +1,12 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { updateMedia, deleteMedia, copyMedia, moveMedia } from "@/app/dashboard/screens/[id]/actions";
+import { deleteMedia, copyMedia, moveMedia } from "@/app/dashboard/screens/[id]/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { MediaFileInput } from "@/components/dashboard/media-file-input";
-import { LocalDateTime, MediaScheduleFields } from "@/components/dashboard/media-schedule-fields";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { LocalDateTime } from "@/components/dashboard/media-schedule-fields";
+import { MediaEditDialog } from "@/components/dashboard/media-edit-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,38 +47,15 @@ export function ScreenMediaItem({
   otherScreens: OtherScreen[];
 }) {
   const [editOpen, setEditOpen] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [deleting, setDeleting] = useState(false);
-  const [type, setType] = useState(media.type);
-  const [isEnabled, setIsEnabled] = useState(media.isEnabled);
-  const durationRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
-
-  async function handleUpdate(formData: FormData) {
-    formData.set("type", type);
-    formData.set("isEnabled", String(isEnabled));
-    setLoading(true);
-    try {
-      await updateMedia(media.id, screenId, formData);
-      setEditOpen(false);
-      router.refresh();
-    } catch {
-      alert("Erro ao atualizar mídia");
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function handleDelete() {
     if (!confirm("Excluir esta mídia?")) return;
-    setDeleting(true);
     try {
       await deleteMedia(media.id, screenId);
       router.refresh();
     } catch {
       alert("Erro ao excluir");
-    } finally {
-      setDeleting(false);
     }
   }
 
@@ -186,73 +146,17 @@ export function ScreenMediaItem({
 
         {/* Actions */}
         <div className="flex items-center gap-1 shrink-0">
-          <Dialog open={editOpen} onOpenChange={setEditOpen}>
-            <DialogTrigger className="inline-flex items-center justify-center rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:text-orange hover:bg-orange/10 cursor-pointer">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
-                </svg>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg bg-card border-border/50">
-              <DialogHeader>
-                <DialogTitle>Editar mídia</DialogTitle>
-              </DialogHeader>
-              <form action={handleUpdate} className="space-y-4 mt-2">
-                <div className="space-y-2">
-                  <Label htmlFor="title">Título</Label>
-                  <Input id="title" name="title" defaultValue={media.title} required className="bg-background/50 border-border/50" />
-                </div>
-
-                <MediaFileInput
-                  defaultUrl={media.fileUrl}
-                  onFileChange={(_url, detectedType, dur) => {
-                    if (detectedType) setType(detectedType);
-                    if (detectedType === "VIDEO" && dur && durationRef.current) {
-                      durationRef.current.value = String(dur);
-                    }
-                  }}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Tipo</Label>
-                    <Select value={type} onValueChange={(v) => v && setType(v)}>
-                      <SelectTrigger className="bg-background/50 border-border/50"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="IMAGE">Imagem</SelectItem>
-                        <SelectItem value="VIDEO">Vídeo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="durationSeconds">Duração (s)</Label>
-                    <Input ref={durationRef} id="durationSeconds" name="durationSeconds" type="number" defaultValue={media.durationSeconds} min={3} max={300} className="bg-background/50 border-border/50" />
-                  </div>
-                </div>
-
-                <MediaScheduleFields defaultStart={media.startDate} defaultEnd={media.endDate} />
-
-                <div className="flex items-center justify-between rounded-xl border border-border/50 bg-background/50 px-4 py-3">
-                  <div>
-                    <p className="text-sm font-medium">Mídia ativa</p>
-                    <p className="text-xs text-muted-foreground">Exibir no player</p>
-                  </div>
-                  <Switch checked={isEnabled} onCheckedChange={setIsEnabled} />
-                </div>
-
-                <div className="flex items-center justify-between pt-2">
-                  <Button type="button" variant="ghost" onClick={handleDelete} disabled={deleting} className="text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer">
-                    {deleting ? "Excluindo..." : "Excluir"}
-                  </Button>
-                  <div className="flex gap-3">
-                    <Button type="button" variant="ghost" onClick={() => setEditOpen(false)} className="cursor-pointer">Cancelar</Button>
-                    <Button type="submit" disabled={loading} className="bg-orange hover:bg-orange/90 text-orange-foreground font-semibold cursor-pointer">
-                      {loading ? "Salvando..." : "Salvar"}
-                    </Button>
-                  </div>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <button
+            type="button"
+            onClick={() => setEditOpen(true)}
+            title="Editar mídia"
+            className="inline-flex items-center justify-center rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:text-orange hover:bg-orange/10 cursor-pointer"
+          >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+              </svg>
+          </button>
+          <MediaEditDialog media={media} screenId={screenId} open={editOpen} onOpenChange={setEditOpen} />
 
           {/* Copy / Move dropdown */}
           {otherScreens.length > 0 && (

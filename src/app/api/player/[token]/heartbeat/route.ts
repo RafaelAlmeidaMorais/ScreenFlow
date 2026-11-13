@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { rateLimit } from "@/lib/rate-limit";
+import { toPlayerOutput } from "@/lib/output-mapping";
+import { parseOfflineStatus } from "@/lib/offline-mode";
 
 export async function POST(
   req: NextRequest,
@@ -25,6 +27,8 @@ export async function POST(
       autoRefreshMinutes: true,
       refreshRequestedAt: true,
       isActive: true,
+      outputMapping: true,
+      offlineEnabled: true,
     },
   });
 
@@ -32,10 +36,16 @@ export async function POST(
     return NextResponse.json({ error: "Tela não encontrada" }, { status: 404 });
   }
 
-  // Update lastSeenAt
+  // Update lastSeenAt, plus how the device is doing at keeping its offline
+  // copy when the screen has offline mode on.
+  const now = new Date();
+  const offlineStatus = screen.offlineEnabled ? parseOfflineStatus(body.offline, now) : null;
   await prisma.screen.update({
     where: { id: screen.id },
-    data: { lastSeenAt: new Date() },
+    data: {
+      lastSeenAt: now,
+      ...(offlineStatus ? { offlineStatus: { ...offlineStatus } } : {}),
+    },
   });
 
   // If this request came from a paired device (has device_id cookie) and the
@@ -96,5 +106,7 @@ export async function POST(
     autoRefreshMinutes: screen.autoRefreshMinutes,
     isActive: screen.isActive,
     mediaCount,
+    // Lets a changed output mapping reach the TV without a reload.
+    output: toPlayerOutput(screen.outputMapping),
   });
 }

@@ -9,6 +9,10 @@ import { AddWidgetDialog } from "@/components/dashboard/add-widget-dialog";
 import { WidgetPriceTableEditor } from "@/components/dashboard/widget-price-table-editor";
 import { MediaSortableList } from "@/components/dashboard/media-sortable-list";
 import { ScreenPlayerControls } from "@/components/dashboard/screen-player-controls";
+import { OutputMappingPanel } from "@/components/dashboard/output-mapping-panel";
+import { DEFAULT_OUTPUT_MAPPING, parseOutputMapping } from "@/lib/output-mapping";
+import { OfflineModePanel } from "@/components/dashboard/offline-mode-panel";
+import { parseOfflineStatus } from "@/lib/offline-mode";
 import { getLayoutDefinition } from "@/lib/layouts";
 import type { PriceTableConfig } from "@/lib/widgets";
 
@@ -43,6 +47,9 @@ export default async function ScreenDetailPage({ params }: Props) {
   });
 
   const now = new Date();
+
+  const { adjustUntil: outputAdjustUntil, ...outputDraft } =
+    parseOutputMapping(screen.outputMapping) ?? DEFAULT_OUTPUT_MAPPING;
 
   const layout = getLayoutDefinition(screen.layoutTemplate, screen.customLayout);
   const slotOptions = layout.slots.map((s) => ({ name: s.name, label: s.label }));
@@ -263,6 +270,18 @@ export default async function ScreenDetailPage({ params }: Props) {
           screenId={screen.id}
           lastSeenAt={screen.lastSeenAt?.toISOString() ?? null}
           autoRefreshMinutes={screen.autoRefreshMinutes}
+        />
+        <OfflineModePanel
+          screenId={screen.id}
+          enabled={screen.offlineEnabled}
+          status={parseOfflineStatus(screen.offlineStatus)}
+        />
+        <OutputMappingPanel
+          screenId={screen.id}
+          initial={outputDraft}
+          initialAdjustMs={
+            outputAdjustUntil ? Math.max(0, new Date(outputAdjustUntil).getTime() - now.getTime()) : 0
+          }
         />
       </div>
 
